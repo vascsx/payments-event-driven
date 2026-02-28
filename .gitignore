@@ -1,0 +1,75 @@
+## .NET / C#
+
+# Build outputs
+bin/
+obj/
+out/
+
+# .NET user-specific files
+*.user
+*.suo
+*.userosscache
+*.userprefs
+*.csproj.user
+
+# Publish output
+publish/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Visual Studio files
+.vs/
+*.vspscc
+*.vssscc
+*.ncb
+*.sap
+*.tlb
+*.tmp
+*.tlh
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# Build artifacts
+[Dd]ebug/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+artifacts/
+
+# ASP.NET
+ScaffoldingReadMe.txt
+
+# Secrets / local config (never commit)
+**/appsettings.Local.json
+**/appsettings.Secrets.json
+
+# Docker
+.dockerignore.local
+
+# Misc
+*.log
+*.bak
+*.swp
+warmup.sem
+nohup.out
+
+# Migrations design snapshots (keep .cs migrations but not user-specific)
+# Uncomment below if you want to ignore all migrations:
+# **/Migrations/
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
