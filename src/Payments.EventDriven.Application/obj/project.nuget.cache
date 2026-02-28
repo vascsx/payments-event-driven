@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "xzhdPozMsRk=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\ander\\source\\repos\\Payments.EventDriven\\src\\Payments.EventDriven.Application\\Payments.EventDriven.Application.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\ander\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.3\\microsoft.extensions.dependencyinjection.abstractions.10.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/Itens de Solução/">
+    <File Path="docker-compose.yml" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="Payments.EventDriven.Api.csproj" />
+    <Project Path="src/Payments.EventDriven.Application/Payments.EventDriven.Application.csproj" Id="cb689970-b4b2-4b36-beee-3e45e7742a6b" />
+    <Project Path="src/Payments.EventDriven.Domain/Payments.EventDriven.Domain.csproj" Id="490eeeab-2d2f-4b32-92c4-d073883e11cf" />
+    <Project Path="src/Payments.EventDriven.Infrastructure/Payments.EventDriven.Infrastructure.csproj" />
+    <Project Path="src/Payments.EventDriven.Processor/Payments.EventDriven.Processor.csproj" Id="5be5410c-0feb-43e5-86db-e13c63f3158a" />
+  </Folder>
+</Solution>

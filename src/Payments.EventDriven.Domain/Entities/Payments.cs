@@ -1,0 +1,48 @@
+﻿using Payments.EventDriven.Domain.Abstractions;
+using Payments.EventDriven.Domain.Enums;
+using System.Diagnostics.CodeAnalysis;
+
+
+namespace Payments.EventDriven.Domain.Entities;
+
+public class Payment : IEntity
+{
+    public Guid Id { get; private set; }
+    public decimal Amount { get; private set; }
+    public required string Currency { get; set; }
+    public PaymentStatus Status { get; private set; }
+    public DateTime CreatedAt { get; private set; }
+
+    private Payment() { } // EF futuramente
+
+    [SetsRequiredMembers]
+    public Payment(decimal amount, string currency)
+    {
+        Id = Guid.NewGuid();
+        Amount = amount;
+        Currency = currency;
+        Status = PaymentStatus.Pending;
+        CreatedAt = DateTime.UtcNow;
+
+        Validate();
+    }
+
+    public void MarkAsProcessed()
+    {
+        Status = PaymentStatus.Processed;
+    }
+
+    public void MarkAsFailed()
+    {
+        Status = PaymentStatus.Failed;
+    }
+
+    private void Validate()
+    {
+        if (Amount <= 0)
+            throw new ArgumentException("Amount must be greater than zero.");
+
+        if (string.IsNullOrWhiteSpace(Currency))
+            throw new ArgumentException("Currency is required.");
+    }
+}

@@ -1,0 +1,14 @@
+﻿{
+  "ConnectionStrings": {
+    "DefaultConnection": ""
+  },
+  "Kafka": {
+    "BootstrapServers": "kafka:9092",
+    "Topic": "payment-created"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information"
+    }
+  }
+}

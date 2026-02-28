@@ -1,0 +1,57 @@
+﻿using Microsoft.EntityFrameworkCore;
+using Payments.EventDriven.Application;
+using Payments.EventDriven.Infrastructure;
+using Payments.EventDriven.Infrastructure.Persistence;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Add Application and Infrastructure services
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+var app = builder.Build();
+
+// Apply database migrations automatically
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<PaymentDbContext>();
+        
+        // Apply pending migrations
+        if (context.Database.GetPendingMigrations().Any())
+        {
+            app.Logger.LogInformation("Applying pending migrations...");
+            context.Database.Migrate();
+            app.Logger.LogInformation("Migrations applied successfully!");
+        }
+        else
+        {
+            app.Logger.LogInformation("No pending migrations.");
+        }
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "An error occurred while migrating the database.");
+        throw;
+    }
+}
+
+// Configure the HTTP request pipeline
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();

@@ -1,0 +1,16 @@
+﻿{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=postgres;Port=5432;Database=paymentsdb;Username=postgres;Password=postgres"
+  },
+  "Kafka": {
+    "BootstrapServers": "kafka:9092",
+    "Topic": "payment-created"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
