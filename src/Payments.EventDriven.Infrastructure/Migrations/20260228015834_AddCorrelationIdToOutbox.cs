@@ -11,7 +11,7 @@ namespace Payments.EventDriven.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
-                name: "CorrelationId",
+                name: "correlation_id",
                 table: "outbox_messages",
                 type: "character varying(100)",
                 maxLength: 100,
@@ -22,7 +22,7 @@ namespace Payments.EventDriven.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "CorrelationId",
+                name: "correlation_id",
                 table: "outbox_messages");
         }
     }

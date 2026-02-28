@@ -15,22 +15,22 @@ namespace Payments.EventDriven.Infrastructure.Migrations
                 name: "outbox_messages",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Topic = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    MessageKey = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Payload = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ProcessedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    topic = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    message_key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    payload = table.Column<string>(type: "text", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    processed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_outbox_messages", x => x.Id);
+                    table.PrimaryKey("PK_outbox_messages", x => x.id);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_outbox_messages_ProcessedAt",
+                name: "IX_outbox_messages_processed_at",
                 table: "outbox_messages",
-                column: "ProcessedAt",
+                column: "processed_at",
                 filter: "processed_at IS NULL");
         }
 
