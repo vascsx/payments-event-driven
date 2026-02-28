@@ -25,9 +25,10 @@ public class CreatePaymentUseCase
 
     public async Task<Guid> ExecuteAsync(
         CreatePaymentRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? correlationId = null)
     {
-        var payment = new Payment(request.Amount, request.Currency);
+        var payment = new Payment(request.Amount, request.Currency.ToUpperInvariant());
 
         var @event = new PaymentCreatedEvent
         {
@@ -39,7 +40,7 @@ public class CreatePaymentUseCase
         };
 
         var payload = JsonSerializer.Serialize(@event);
-        var outboxMessage = new OutboxMessage(KafkaTopics.PaymentCreated, payment.Id.ToString(), payload);
+        var outboxMessage = new OutboxMessage(KafkaTopics.PaymentCreated, payment.Id.ToString(), payload, correlationId);
 
         // Atomic: persist payment + outbox in a single transaction
         await _repository.AddAsync(payment, cancellationToken);

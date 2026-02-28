@@ -28,6 +28,9 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
 
         builder.Property(m => m.ProcessedAt);
 
+        builder.Property(m => m.CorrelationId)
+            .HasMaxLength(100);
+
         builder.HasIndex(m => m.ProcessedAt)
             .HasFilter("processed_at IS NULL");
     }

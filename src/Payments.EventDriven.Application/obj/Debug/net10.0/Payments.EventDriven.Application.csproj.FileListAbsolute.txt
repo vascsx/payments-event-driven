@@ -28,3 +28,4 @@ C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Applic
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Application\obj\Debug\net10.0\refint\Payments.EventDriven.Application.dll
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Application\obj\Debug\net10.0\Payments.EventDriven.Application.pdb
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Application\obj\Debug\net10.0\ref\Payments.EventDriven.Application.dll
+C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Application\obj\Debug\net10.0\Payments.EventDriven.Application.sourcelink.json

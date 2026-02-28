@@ -22,7 +22,9 @@ public class OutboxRepository : IOutboxRepository
     {
         return await _context.OutboxMessages
             .Where(m => m.ProcessedAt == null)
-            .OrderBy(m => m.CreatedAt)
+            .OrderBy(m => m.Topic)
+            .ThenBy(m => m.MessageKey)
+            .ThenBy(m => m.CreatedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }

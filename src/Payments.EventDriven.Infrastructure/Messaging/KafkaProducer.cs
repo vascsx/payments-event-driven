@@ -1,4 +1,5 @@
-﻿using Confluent.Kafka;
+﻿using System.Text;
+using Confluent.Kafka;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Infrastructure.Settings;
 
@@ -18,20 +19,34 @@ public class KafkaProducer : IKafkaProducer, IDisposable
             EnableIdempotence = true,
             MessageSendMaxRetries = 3,
             MaxInFlight = 5,
-            MessageTimeoutMs = 30000,
+            MessageTimeoutMs = 120000,
             LingerMs = 5
         };
 
         _producer = new ProducerBuilder<string, string>(config).Build();
     }
 
-    public async Task PublishAsync(string topic, string key, string message, CancellationToken cancellationToken)
+    public async Task PublishAsync(
+        string topic,
+        string key,
+        string message,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
-        await _producer.ProduceAsync(topic, new Message<string, string>
+        var kafkaMessage = new Message<string, string>
         {
             Key = key,
             Value = message
-        }, cancellationToken);
+        };
+
+        if (headers is not null && headers.Count > 0)
+        {
+            kafkaMessage.Headers = new Headers();
+            foreach (var (k, v) in headers)
+                kafkaMessage.Headers.Add(k, Encoding.UTF8.GetBytes(v));
+        }
+
+        await _producer.ProduceAsync(topic, kafkaMessage, cancellationToken);
     }
 
     public void Dispose()

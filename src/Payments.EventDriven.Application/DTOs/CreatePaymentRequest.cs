@@ -9,6 +9,6 @@ public class CreatePaymentRequest
     public decimal Amount { get; set; }
 
     [Required]
-    [StringLength(10, MinimumLength = 3, ErrorMessage = "Currency must be between 3 and 10 characters.")]
+    [RegularExpression(@"^[A-Z]{3}$", ErrorMessage = "Currency must be a valid ISO 4217 code (e.g. USD, EUR, BRL).")]
     public string Currency { get; set; } = string.Empty;
 }

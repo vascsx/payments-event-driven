@@ -1,10 +1,13 @@
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Payments.EventDriven.Application.Constants;
 using Payments.EventDriven.Application.Events;
+using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Domain.Enums;
 using Payments.EventDriven.Infrastructure.Persistence;
 using Payments.EventDriven.Infrastructure.Settings;
@@ -16,16 +19,19 @@ public class PaymentConsumerWorker : BackgroundService
     private readonly ILogger<PaymentConsumerWorker> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly KafkaSettings _settings;
+    private readonly IKafkaProducer _kafkaProducer;
     private const int MaxRetries = 3;
 
     public PaymentConsumerWorker(
         ILogger<PaymentConsumerWorker> logger,
         IServiceProvider serviceProvider,
-        KafkaSettings settings)
+        KafkaSettings settings,
+        IKafkaProducer kafkaProducer)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _settings = settings;
+        _kafkaProducer = kafkaProducer;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,11 +54,14 @@ public class PaymentConsumerWorker : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             ConsumeResult<string, string>? result = null;
+            string? correlationId = null;
             try
             {
                 result = consumer.Consume(stoppingToken);
 
                 if (result?.Message?.Value is null) continue;
+
+                correlationId = ExtractHeader(result.Message.Headers, "X-Correlation-Id");
 
                 var @event = JsonSerializer.Deserialize<PaymentCreatedEvent>(result.Message.Value);
                 if (@event is null)
@@ -63,7 +72,11 @@ public class PaymentConsumerWorker : BackgroundService
                     continue;
                 }
 
-                using (_logger.BeginScope(new Dictionary<string, object> { ["PaymentId"] = @event.PaymentId }))
+                using (_logger.BeginScope(new Dictionary<string, object?>
+                {
+                    ["PaymentId"] = @event.PaymentId,
+                    ["CorrelationId"] = correlationId
+                }))
                 {
                     await ProcessWithRetryAsync(@event, stoppingToken);
                 }
@@ -82,18 +95,49 @@ public class PaymentConsumerWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled error processing message, committing offset to avoid poison pill");
+                _logger.LogError(ex, "All retries exhausted processing message. Publishing to DLQ");
                 if (result is not null)
                 {
-                    // Publish to DLQ here if implemented
+                    try
+                    {
+                        var dlqHeaders = new Dictionary<string, string>
+                        {
+                            ["X-Error-Message"] = ex.Message,
+                            ["X-Original-Topic"] = _settings.Topic
+                        };
+                        if (correlationId is not null) dlqHeaders["X-Correlation-Id"] = correlationId;
+
+                        await _kafkaProducer.PublishAsync(
+                            KafkaTopics.PaymentCreatedDlq,
+                            result.Message.Key,
+                            result.Message.Value,
+                            stoppingToken,
+                            dlqHeaders);
+
+                        _logger.LogWarning("Message routed to DLQ topic {Dlq}", KafkaTopics.PaymentCreatedDlq);
+                    }
+                    catch (Exception dlqEx)
+                    {
+                        _logger.LogError(dlqEx, "Failed to publish to DLQ; committing offset anyway to prevent poison pill");
+                    }
+
                     consumer.StoreOffset(result);
                     consumer.Commit(result);
                 }
+
                 await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
             }
         }
 
         consumer.Close();
+    }
+
+    private static string? ExtractHeader(Headers? headers, string key)
+    {
+        if (headers is null) return null;
+        return headers.TryGetLastBytes(key, out var bytes)
+            ? Encoding.UTF8.GetString(bytes)
+            : null;
     }
 
     private async Task ProcessWithRetryAsync(PaymentCreatedEvent @event, CancellationToken cancellationToken)
@@ -122,27 +166,39 @@ public class PaymentConsumerWorker : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
 
-        var payment = await context.Payments
-            .FirstOrDefaultAsync(p => p.Id == @event.PaymentId, cancellationToken);
-
-        if (payment is null)
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            _logger.LogWarning("Payment {PaymentId} not found in database, skipping", @event.PaymentId);
-            return;
-        }
+            var payment = await context.Payments
+                .FirstOrDefaultAsync(p => p.Id == @event.PaymentId, cancellationToken);
 
-        // Idempotency: skip if already processed
-        if (payment.Status != PaymentStatus.Pending)
+            if (payment is null)
+            {
+                _logger.LogWarning("Payment {PaymentId} not found in database, skipping", @event.PaymentId);
+                await tx.RollbackAsync(cancellationToken);
+                return;
+            }
+
+            // Idempotency: skip if already processed
+            if (payment.Status != PaymentStatus.Pending)
+            {
+                _logger.LogInformation(
+                    "Payment {PaymentId} already in status {Status}, skipping (idempotent)",
+                    @event.PaymentId, payment.Status);
+                await tx.RollbackAsync(cancellationToken);
+                return;
+            }
+
+            payment.MarkAsProcessed();
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            _logger.LogInformation("Payment {PaymentId} successfully marked as Processed", @event.PaymentId);
+        }
+        catch
         {
-            _logger.LogInformation(
-                "Payment {PaymentId} already in status {Status}, skipping (idempotent)",
-                @event.PaymentId, payment.Status);
-            return;
+            await tx.RollbackAsync(cancellationToken);
+            throw;
         }
-
-        payment.MarkAsProcessed();
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Payment {PaymentId} successfully marked as Processed", @event.PaymentId);
     }
 }

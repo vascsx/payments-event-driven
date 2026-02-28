@@ -12,8 +12,8 @@ public class Program
 
         builder.Services.Configure<HostOptions>(options =>
         {
-            // Keep the worker running even if an exception occurs in the background service
-            options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+            // Stop the host so the container restarts when the worker crashes
+            options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;
         });
 
         builder.Services.AddInfrastructure(builder.Configuration);

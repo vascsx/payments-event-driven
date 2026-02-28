@@ -2,5 +2,10 @@
 
 public interface IKafkaProducer
 {
-    Task PublishAsync(string topic, string key, string message, CancellationToken cancellationToken);
+    Task PublishAsync(
+        string topic,
+        string key,
+        string message,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null);
 }

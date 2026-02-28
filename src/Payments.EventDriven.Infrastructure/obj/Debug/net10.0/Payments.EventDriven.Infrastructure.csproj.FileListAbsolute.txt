@@ -36,3 +36,4 @@ C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Infras
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Infrastructure\obj\Debug\net10.0\Payments.EventDriven.Infrastructure.pdb
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Infrastructure\obj\Debug\net10.0\Payments.EventDriven.Infrastructure.genruntimeconfig.cache
 C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Infrastructure\obj\Debug\net10.0\ref\Payments.EventDriven.Infrastructure.dll
+C:\Users\ander\source\repos\Payments.EventDriven\src\Payments.EventDriven.Infrastructure\obj\Debug\net10.0\Payments.EventDriven.Infrastructure.sourcelink.json

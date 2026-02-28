@@ -60,11 +60,16 @@ public class OutboxPublisherService : BackgroundService
         {
             try
             {
+                var headers = new Dictionary<string, string>();
+                if (message.CorrelationId is not null)
+                    headers["X-Correlation-Id"] = message.CorrelationId;
+
                 await _kafkaProducer.PublishAsync(
                     message.Topic,
                     message.MessageKey,
                     message.Payload,
-                    cancellationToken);
+                    cancellationToken,
+                    headers.Count > 0 ? headers : null);
 
                 message.MarkAsProcessed();
 

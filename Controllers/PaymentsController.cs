@@ -20,7 +20,13 @@ public class PaymentsController : ControllerBase
         [FromBody] CreatePaymentRequest request,
         CancellationToken cancellationToken)
     {
-        var id = await _useCase.ExecuteAsync(request, cancellationToken);
+        var correlationId = Request.Headers.TryGetValue("X-Correlation-Id", out var cid) && !string.IsNullOrWhiteSpace(cid)
+            ? cid.ToString()
+            : Guid.NewGuid().ToString();
+
+        Response.Headers["X-Correlation-Id"] = correlationId;
+
+        var id = await _useCase.ExecuteAsync(request, cancellationToken, correlationId);
 
         return CreatedAtAction(nameof(Create), new { id }, new { id });
     }
