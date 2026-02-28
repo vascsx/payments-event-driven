@@ -36,6 +36,10 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
         builder.Property(m => m.ProcessedAt)
             .HasColumnName("processed_at");
 
+        builder.Property(m => m.RetryCount)
+            .HasColumnName("retry_count")
+            .HasDefaultValue(0);
+
         builder.Property(m => m.CorrelationId)
             .HasColumnName("correlation_id")
             .HasMaxLength(100);

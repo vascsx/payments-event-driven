@@ -1,11 +1,11 @@
 ﻿namespace Payments.EventDriven.Application.Interfaces;
 
-public interface IKafkaProducer
+public interface IEventPublisher
 {
     Task PublishAsync(
         string topic,
         string key,
         string message,
-        CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? headers = null);
+        IReadOnlyDictionary<string, string>? headers = null,
+        CancellationToken cancellationToken = default);
 }

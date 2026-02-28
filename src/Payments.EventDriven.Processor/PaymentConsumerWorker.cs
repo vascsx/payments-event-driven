@@ -1,15 +1,13 @@
 using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Payments.EventDriven.Application.Constants;
 using Payments.EventDriven.Application.Events;
 using Payments.EventDriven.Application.Interfaces;
-using Payments.EventDriven.Domain.Enums;
-using Payments.EventDriven.Infrastructure.Persistence;
+using Payments.EventDriven.Domain.Exceptions;
 using Payments.EventDriven.Infrastructure.Settings;
 
 namespace Payments.EventDriven.Processor.Workers;
@@ -19,22 +17,32 @@ public class PaymentConsumerWorker : BackgroundService
     private readonly ILogger<PaymentConsumerWorker> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly KafkaSettings _settings;
-    private readonly IKafkaProducer _kafkaProducer;
+    private readonly IEventPublisher _eventPublisher;
     private const int MaxRetries = 3;
 
     public PaymentConsumerWorker(
         ILogger<PaymentConsumerWorker> logger,
         IServiceProvider serviceProvider,
         KafkaSettings settings,
-        IKafkaProducer kafkaProducer)
+        IEventPublisher eventPublisher)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _settings = settings;
-        _kafkaProducer = kafkaProducer;
+        _eventPublisher = eventPublisher;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Use LongRunning to avoid blocking a ThreadPool thread with the Kafka consume loop
+        return Task.Factory.StartNew(
+            () => ConsumeLoop(stoppingToken),
+            stoppingToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+    }
+
+    private async Task ConsumeLoop(CancellationToken stoppingToken)
     {
         var config = new ConsumerConfig
         {
@@ -67,7 +75,6 @@ public class PaymentConsumerWorker : BackgroundService
                 if (@event is null)
                 {
                     _logger.LogWarning("Failed to deserialize message at offset {Offset}, skipping", result.Offset);
-                    consumer.StoreOffset(result);
                     consumer.Commit(result);
                     continue;
                 }
@@ -78,10 +85,9 @@ public class PaymentConsumerWorker : BackgroundService
                     ["CorrelationId"] = correlationId
                 }))
                 {
-                    await ProcessWithRetryAsync(@event, stoppingToken);
+                    await ProcessWithRetryAsync(@event.PaymentId, stoppingToken);
                 }
 
-                consumer.StoreOffset(result);
                 consumer.Commit(result);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -107,12 +113,12 @@ public class PaymentConsumerWorker : BackgroundService
                         };
                         if (correlationId is not null) dlqHeaders["X-Correlation-Id"] = correlationId;
 
-                        await _kafkaProducer.PublishAsync(
+                        await _eventPublisher.PublishAsync(
                             KafkaTopics.PaymentCreatedDlq,
                             result.Message.Key,
                             result.Message.Value,
-                            stoppingToken,
-                            dlqHeaders);
+                            dlqHeaders,
+                            stoppingToken);
 
                         _logger.LogWarning("Message routed to DLQ topic {Dlq}", KafkaTopics.PaymentCreatedDlq);
                     }
@@ -121,7 +127,6 @@ public class PaymentConsumerWorker : BackgroundService
                         _logger.LogError(dlqEx, "Failed to publish to DLQ; committing offset anyway to prevent poison pill");
                     }
 
-                    consumer.StoreOffset(result);
                     consumer.Commit(result);
                 }
 
@@ -140,65 +145,42 @@ public class PaymentConsumerWorker : BackgroundService
             : null;
     }
 
-    private async Task ProcessWithRetryAsync(PaymentCreatedEvent @event, CancellationToken cancellationToken)
+    private async Task ProcessWithRetryAsync(Guid paymentId, CancellationToken cancellationToken)
     {
         var attempts = 0;
         while (true)
         {
             try
             {
-                await ProcessPaymentAsync(@event, cancellationToken);
+                using var scope = _serviceProvider.CreateScope();
+                var useCase = scope.ServiceProvider.GetRequiredService<IProcessPaymentUseCase>();
+                var result = await useCase.ProcessAsync(paymentId, cancellationToken);
+
+                if (result == ProcessPaymentResult.AlreadyProcessed)
+                    _logger.LogInformation("Payment {PaymentId} already processed, skipping (idempotent)", paymentId);
+                else
+                    _logger.LogInformation("Payment {PaymentId} successfully marked as Processed", paymentId);
+
                 return;
             }
-            catch (Exception ex) when (++attempts < MaxRetries)
+            catch (Exception ex) when (IsTransient(ex) && ++attempts < MaxRetries)
             {
                 var delay = TimeSpan.FromSeconds(Math.Pow(2, attempts));
                 _logger.LogWarning(ex,
                     "Failed to process payment {PaymentId}, attempt {Attempt}/{MaxRetries}. Retrying in {Delay}s",
-                    @event.PaymentId, attempts, MaxRetries, delay.TotalSeconds);
+                    paymentId, attempts, MaxRetries, delay.TotalSeconds);
                 await Task.Delay(delay, cancellationToken);
             }
+            // Permanent exceptions (JsonException, ArgumentException, etc.) propagate directly → DLQ
         }
     }
 
-    private async Task ProcessPaymentAsync(PaymentCreatedEvent @event, CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
-
-        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            var payment = await context.Payments
-                .FirstOrDefaultAsync(p => p.Id == @event.PaymentId, cancellationToken);
-
-            if (payment is null)
-            {
-                _logger.LogWarning("Payment {PaymentId} not found in database, skipping", @event.PaymentId);
-                await tx.RollbackAsync(cancellationToken);
-                return;
-            }
-
-            // Idempotency: skip if already processed
-            if (payment.Status != PaymentStatus.Pending)
-            {
-                _logger.LogInformation(
-                    "Payment {PaymentId} already in status {Status}, skipping (idempotent)",
-                    @event.PaymentId, payment.Status);
-                await tx.RollbackAsync(cancellationToken);
-                return;
-            }
-
-            payment.MarkAsProcessed();
-            await context.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
-
-            _logger.LogInformation("Payment {PaymentId} successfully marked as Processed", @event.PaymentId);
-        }
-        catch
-        {
-            await tx.RollbackAsync(cancellationToken);
-            throw;
-        }
-    }
+    /// <summary>
+    /// Whitelist approach: only known transient exceptions are retried.
+    /// Unknown exceptions go straight to DLQ.
+    /// </summary>
+    private static bool IsTransient(Exception ex) =>
+        ex is PaymentNotYetVisibleException
+            or TimeoutException
+            or System.Net.Sockets.SocketException;
 }

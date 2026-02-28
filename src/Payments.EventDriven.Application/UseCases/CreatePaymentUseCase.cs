@@ -7,7 +7,7 @@ using Payments.EventDriven.Domain.Entities;
 
 namespace Payments.EventDriven.Application.UseCases;
 
-public class CreatePaymentUseCase
+public class CreatePaymentUseCase : ICreatePaymentUseCase
 {
     private readonly IPaymentRepository _repository;
     private readonly IOutboxRepository _outboxRepository;

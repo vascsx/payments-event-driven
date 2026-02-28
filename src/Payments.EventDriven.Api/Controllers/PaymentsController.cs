@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Payments.EventDriven.Application.DTOs;
-using Payments.EventDriven.Application.UseCases;
+using Payments.EventDriven.Application.Interfaces;
 
 namespace Payments.EventDriven.Api.Controllers;
 
@@ -8,9 +8,9 @@ namespace Payments.EventDriven.Api.Controllers;
 [Route("api/[controller]")]
 public class PaymentsController : ControllerBase
 {
-    private readonly CreatePaymentUseCase _useCase;
+    private readonly ICreatePaymentUseCase _useCase;
 
-    public PaymentsController(CreatePaymentUseCase useCase)
+    public PaymentsController(ICreatePaymentUseCase useCase)
     {
         _useCase = useCase;
     }

@@ -24,7 +24,14 @@ public class ValidationFilter : IActionFilter
             _logger.LogWarning("Validation failed for {Action}: {@Errors}",
                 context.ActionDescriptor.DisplayName, errors);
 
-            context.Result = new BadRequestObjectResult(context.ModelState);
+            var problemDetails = new ValidationProblemDetails(context.ModelState)
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Validation Error",
+                Type = "https://httpstatuses.com/400"
+            };
+
+            context.Result = new BadRequestObjectResult(problemDetails);
         }
     }
 

@@ -11,11 +11,13 @@ public class OutboxMessage
     public DateTime? ProcessedAt { get; private set; }
     public bool IsProcessed => ProcessedAt.HasValue;
 
+    public int RetryCount { get; private set; }
+
     private OutboxMessage() { } // EF Core
 
     public OutboxMessage(string topic, string messageKey, string payload, string? correlationId = null)
     {
-        Id = Guid.NewGuid();
+        Id = Guid.CreateVersion7();
         Topic = topic;
         MessageKey = messageKey;
         Payload = payload;
@@ -26,5 +28,10 @@ public class OutboxMessage
     public void MarkAsProcessed()
     {
         ProcessedAt = DateTime.UtcNow;
+    }
+
+    public void IncrementRetry()
+    {
+        RetryCount++;
     }
 }

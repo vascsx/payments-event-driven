@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Payments.EventDriven.Application\Payments.EventDriven.Application.csproj" />
     <ProjectReference Include="..\Payments.EventDriven.Infrastructure\Payments.EventDriven.Infrastructure.csproj" />
     <ProjectReference Include="..\Payments.EventDriven.Domain\Payments.EventDriven.Domain.csproj" />
   </ItemGroup>

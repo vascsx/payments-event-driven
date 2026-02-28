@@ -17,7 +17,11 @@ public static class DependencyInjection
     {
         services.AddDbContext<PaymentDbContext>(options =>
             options.UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection")));
+                configuration.GetConnectionString("DefaultConnection"),
+                npgsql => npgsql.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorCodesToAdd: null)));
 
         var kafkaSettings = new KafkaSettings();
         configuration.GetSection("Kafka").Bind(kafkaSettings);
@@ -26,7 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddSingleton<IKafkaProducer, KafkaProducer>();
+        services.AddSingleton<IEventPublisher, KafkaProducer>();
 
         return services;
     }

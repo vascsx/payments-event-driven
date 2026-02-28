@@ -3,6 +3,7 @@ using Payments.EventDriven.Application;
 using Payments.EventDriven.Filters;
 using Payments.EventDriven.Infrastructure;
 using Payments.EventDriven.Infrastructure.Persistence;
+using Payments.EventDriven.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,27 +12,30 @@ builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ValidationFilter>();
 });
+builder.Services.AddTransient<ExceptionMiddleware>();
 
 // Add Application and Infrastructure services
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOutboxPublisher();
 
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<PaymentDbContext>("database");
+
 var app = builder.Build();
 
-// Apply database migrations automatically
-using (var scope = app.Services.CreateScope())
+// Apply database migrations automatically (development only)
+if (app.Environment.IsDevelopment())
 {
-    var services = scope.ServiceProvider;
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
     try
     {
-        var context = services.GetRequiredService<PaymentDbContext>();
-        
-        // Apply pending migrations
-        if (context.Database.GetPendingMigrations().Any())
+        if ((await context.Database.GetPendingMigrationsAsync()).Any())
         {
             app.Logger.LogInformation("Applying pending migrations...");
-            context.Database.Migrate();
+            await context.Database.MigrateAsync();
             app.Logger.LogInformation("Migrations applied successfully!");
         }
         else
@@ -47,8 +51,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();

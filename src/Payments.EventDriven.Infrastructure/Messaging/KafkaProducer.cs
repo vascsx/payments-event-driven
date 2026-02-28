@@ -5,7 +5,7 @@ using Payments.EventDriven.Infrastructure.Settings;
 
 namespace Payments.EventDriven.Infrastructure.Messaging;
 
-public class KafkaProducer : IKafkaProducer, IDisposable
+public class KafkaProducer : IEventPublisher, IDisposable
 {
     private readonly IProducer<string, string> _producer;
     private bool _disposed;
@@ -18,7 +18,7 @@ public class KafkaProducer : IKafkaProducer, IDisposable
             Acks = Acks.All,
             EnableIdempotence = true,
             MessageSendMaxRetries = 3,
-            MaxInFlight = 5,
+            MaxInFlight = 1,  
             MessageTimeoutMs = 120000,
             LingerMs = 5
         };
@@ -30,8 +30,8 @@ public class KafkaProducer : IKafkaProducer, IDisposable
         string topic,
         string key,
         string message,
-        CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? headers = null)
+        IReadOnlyDictionary<string, string>? headers = null,
+        CancellationToken cancellationToken = default)
     {
         var kafkaMessage = new Message<string, string>
         {

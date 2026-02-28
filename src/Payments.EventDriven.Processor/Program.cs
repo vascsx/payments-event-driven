@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Payments.EventDriven.Application;
 using Payments.EventDriven.Infrastructure;
 using Payments.EventDriven.Processor.Workers;
 
@@ -16,6 +17,7 @@ public class Program
             options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;
         });
 
+        builder.Services.AddApplication();
         builder.Services.AddInfrastructure(builder.Configuration);
         builder.Services.AddHostedService<PaymentConsumerWorker>();
 

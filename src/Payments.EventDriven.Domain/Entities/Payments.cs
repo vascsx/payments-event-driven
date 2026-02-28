@@ -1,6 +1,5 @@
 ﻿using Payments.EventDriven.Domain.Abstractions;
 using Payments.EventDriven.Domain.Enums;
-using System.Diagnostics.CodeAnalysis;
 
 
 namespace Payments.EventDriven.Domain.Entities;
@@ -9,16 +8,15 @@ public class Payment : IEntity
 {
     public Guid Id { get; private set; }
     public decimal Amount { get; private set; }
-    public required string Currency { get; set; }
+    public string Currency { get; private set; } = string.Empty;
     public PaymentStatus Status { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
-    private Payment() { } // EF futuramente
+    private Payment() { } // EF Core
 
-    [SetsRequiredMembers]
     public Payment(decimal amount, string currency)
     {
-        Id = Guid.NewGuid();
+        Id = Guid.CreateVersion7();
         Amount = amount;
         Currency = currency;
         Status = PaymentStatus.Pending;
@@ -29,11 +27,19 @@ public class Payment : IEntity
 
     public void MarkAsProcessed()
     {
+        if (Status != PaymentStatus.Pending)
+            throw new InvalidOperationException(
+                $"Cannot mark payment as Processed from status {Status}.");
+
         Status = PaymentStatus.Processed;
     }
 
     public void MarkAsFailed()
     {
+        if (Status != PaymentStatus.Pending)
+            throw new InvalidOperationException(
+                $"Cannot mark payment as Failed from status {Status}.");
+
         Status = PaymentStatus.Failed;
     }
 

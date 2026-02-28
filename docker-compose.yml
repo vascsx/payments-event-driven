@@ -102,7 +102,7 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5431;Database=paymentsdb;Username=postgres;Password=postgres
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=paymentsdb;Username=postgres;Password=postgres
       Kafka__BootstrapServers: kafka:9092
       Kafka__Topic: payment-created
       Kafka__GroupId: payment-processor-group
