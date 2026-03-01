@@ -48,28 +48,16 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
         var messageKey = payment.Id.ToString();
 
         // Persiste pagamento e evento no outbox na mesma transação (Outbox Pattern)
-        try
-        {
-            await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        await _repository.AddAsync(payment, cancellationToken);
+        
+        var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId);
+        await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
 
-            await _repository.AddAsync(payment, cancellationToken);
-            
-            var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId);
-            await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            await _unitOfWork.CommitTransactionAsync(cancellationToken);
-
-            _logger.LogInformation(
-                "Payment {PaymentId} created and event persisted to outbox with id {OutboxId}",
-                payment.Id, outboxMessage.Id);
-        }
-        catch (Exception ex)
-        {
-            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
-            _logger.LogError(ex, "Failed to create payment {PaymentId}, transaction rolled back", payment.Id);
-            throw;
-        }
+        _logger.LogInformation(
+            "Payment {PaymentId} created and event persisted to outbox with id {OutboxId}",
+            payment.Id, outboxMessage.Id);
 
         return payment.Id;
     }

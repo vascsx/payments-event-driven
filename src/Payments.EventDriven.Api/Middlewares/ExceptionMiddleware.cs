@@ -28,7 +28,7 @@ public class ExceptionMiddleware : IMiddleware
             {
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Validation Error",
-                Detail = "The request contains invalid data.",
+                Detail = ex.Message,
                 Type = "https://httpstatuses.com/400"
             });
         }
@@ -41,7 +41,7 @@ public class ExceptionMiddleware : IMiddleware
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
                 Title = "Unprocessable Entity",
-                Detail = "The request could not be processed.",
+                Detail = ex.Message,
                 Type = "https://httpstatuses.com/422"
             });
         }
