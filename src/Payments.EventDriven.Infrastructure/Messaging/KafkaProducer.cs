@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Confluent.Kafka;
+using Microsoft.Extensions.Options;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Infrastructure.Settings;
 
@@ -10,11 +11,11 @@ public class KafkaProducer : IEventPublisher, IDisposable
     private readonly IProducer<string, string> _producer;
     private bool _disposed;
 
-    public KafkaProducer(KafkaSettings settings)
+    public KafkaProducer(IOptions<KafkaSettings> settings)
     {
         var config = new ProducerConfig
         {
-            BootstrapServers = settings.BootstrapServers,
+            BootstrapServers = settings.Value.BootstrapServers,
             Acks = Acks.All,
             EnableIdempotence = true,
             MessageSendMaxRetries = 3,

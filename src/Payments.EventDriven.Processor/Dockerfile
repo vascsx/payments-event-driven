@@ -10,17 +10,17 @@ WORKDIR /src
 COPY ["src/", "."]
 
 # Restore packages
-RUN dotnet restore "Payments.EventDriven.Processor/Payments.EventDriven.Processor.csproj"
+RUN dotnet restore "Payments.EventDriven.Processor/Payments.EventDriven.OutboxProcessor.csproj"
 
 # Build
 WORKDIR "/src/Payments.EventDriven.Processor"
-RUN dotnet build "Payments.EventDriven.Processor.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "Payments.EventDriven.OutboxProcessor.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "Payments.EventDriven.Processor.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Payments.EventDriven.OutboxProcessor.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "Payments.EventDriven.Processor.dll"]
+ENTRYPOINT ["dotnet", "Payments.EventDriven.OutboxProcessor.dll"]

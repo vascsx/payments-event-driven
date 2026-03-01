@@ -10,6 +10,7 @@ public class OutboxMessage
     public string Topic { get; private set; } = string.Empty;
     public string MessageKey { get; private set; } = string.Empty;
     public string Payload { get; private set; } = string.Empty;
+    public string EventType { get; private set; } = "payment-created"; // Tipo do evento para roteamento
     public string? CorrelationId { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? ProcessedAt { get; private set; }
@@ -20,12 +21,18 @@ public class OutboxMessage
 
     private OutboxMessage() { } // EF Core
 
-    public OutboxMessage(string topic, string messageKey, string payload, string? correlationId = null)
+    public OutboxMessage(
+        string topic, 
+        string messageKey, 
+        string payload, 
+        string? correlationId = null,
+        string eventType = "payment-created")
     {
         Id = Guid.CreateVersion7();
         Topic = topic;
         MessageKey = messageKey;
         Payload = payload;
+        EventType = eventType;
         CorrelationId = correlationId;
         CreatedAt = DateTime.UtcNow;
         Status = OutboxMessageStatus.Pending;
@@ -51,6 +58,7 @@ public class OutboxMessage
         RetryCount++;
         LastRetryAt = DateTime.UtcNow;
         LastError = errorMessage;
+        Status = OutboxMessageStatus.Pending;
     }
 
     public void MarkAsFailed(string? errorMessage = null)

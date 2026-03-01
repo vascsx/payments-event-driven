@@ -30,6 +30,12 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
             .HasColumnType("text")
             .IsRequired();
 
+        builder.Property(o => o.EventType)
+            .HasColumnName("event_type")
+            .HasMaxLength(100)
+            .IsRequired()
+            .HasDefaultValue("payment-created");
+
         builder.Property(o => o.CorrelationId)
             .HasColumnName("correlation_id")
             .HasMaxLength(255);

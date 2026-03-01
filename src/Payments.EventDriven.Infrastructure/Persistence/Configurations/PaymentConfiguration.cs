@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Payments.EventDriven.Domain.Entities;
+using Payments.EventDriven.Domain.Enums;
 
 namespace Payments.EventDriven.Infrastructure.Persistence.Configurations;
 
@@ -24,6 +25,11 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasColumnName("currency")
             .HasMaxLength(10)
             .IsRequired();
+
+        builder.Property(p => p.Type)
+            .HasColumnName("type")
+            .IsRequired()
+            .HasDefaultValue(PaymentType.Default); 
 
         builder.Property(p => p.Status)
             .HasColumnName("status")

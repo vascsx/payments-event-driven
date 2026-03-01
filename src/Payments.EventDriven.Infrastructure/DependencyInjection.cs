@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Infrastructure.HealthChecks;
 using Payments.EventDriven.Infrastructure.Messaging;
@@ -26,9 +27,8 @@ public static class DependencyInjection
                     errorCodesToAdd: null)));
 
         // Kafka
-        var kafkaSettings = new KafkaSettings();
-        configuration.GetSection("Kafka").Bind(kafkaSettings);
-        services.AddSingleton(kafkaSettings);
+        services.Configure<KafkaSettings>(options =>
+            configuration.GetSection("Kafka").Bind(options));
 
         // Repositories
         services.AddScoped<IPaymentRepository, PaymentRepository>();
