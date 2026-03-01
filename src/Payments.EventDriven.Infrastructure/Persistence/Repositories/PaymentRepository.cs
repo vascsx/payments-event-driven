@@ -24,4 +24,17 @@ public class PaymentRepository : IPaymentRepository
         return await _context.Payments
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+        if (payment is null)
+            return false;
+
+        _context.Payments.Remove(payment);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }

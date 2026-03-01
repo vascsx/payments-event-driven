@@ -10,6 +10,8 @@ public static class DependencyInjection
     {
         services.AddScoped<ICreatePaymentUseCase, CreatePaymentUseCase>();
         services.AddScoped<IProcessPaymentUseCase, ProcessPaymentUseCase>();
+        services.AddScoped<IGetPaymentUseCase, GetPaymentUseCase>();
+        services.AddScoped<IDeletePaymentUseCase, DeletePaymentUseCase>();
 
         return services;
     }
