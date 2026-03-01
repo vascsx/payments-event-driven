@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Payments.EventDriven.Application.Constants;
 using Payments.EventDriven.Application.DTOs;
 using Payments.EventDriven.Application.Events;
@@ -12,15 +13,18 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
     private readonly IPaymentRepository _repository;
     private readonly IOutboxRepository _outboxRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<CreatePaymentUseCase> _logger;
 
     public CreatePaymentUseCase(
         IPaymentRepository repository,
         IOutboxRepository outboxRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CreatePaymentUseCase> logger)
     {
         _repository = repository;
         _outboxRepository = outboxRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public async Task<Guid> ExecuteAsync(
@@ -40,12 +44,32 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
         };
 
         var payload = JsonSerializer.Serialize(@event);
-        var outboxMessage = new OutboxMessage(KafkaTopics.PaymentCreated, payment.Id.ToString(), payload, correlationId);
+        var topic = KafkaTopics.PaymentCreated;
+        var messageKey = payment.Id.ToString();
 
-        // Atomic: persist payment + outbox in a single transaction
-        await _repository.AddAsync(payment, cancellationToken);
-        await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        // Persiste pagamento e evento no outbox na mesma transação (Outbox Pattern)
+        try
+        {
+            await _unitOfWork.BeginTransactionAsync(cancellationToken);
+
+            await _repository.AddAsync(payment, cancellationToken);
+            
+            var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId);
+            await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Payment {PaymentId} created and event persisted to outbox with id {OutboxId}",
+                payment.Id, outboxMessage.Id);
+        }
+        catch (Exception ex)
+        {
+            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            _logger.LogError(ex, "Failed to create payment {PaymentId}, transaction rolled back", payment.Id);
+            throw;
+        }
 
         return payment.Id;
     }

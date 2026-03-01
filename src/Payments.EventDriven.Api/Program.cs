@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Payments.EventDriven.Application;
 using Payments.EventDriven.Filters;
 using Payments.EventDriven.Infrastructure;
+using Payments.EventDriven.Infrastructure.HealthChecks;
 using Payments.EventDriven.Infrastructure.Persistence;
 using Payments.EventDriven.Middlewares;
 
@@ -17,16 +18,17 @@ builder.Services.AddTransient<ExceptionMiddleware>();
 // Add Application and Infrastructure services
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddOutboxPublisher();
 
 // Health checks
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<PaymentDbContext>("database");
+    .AddDbContextCheck<PaymentDbContext>("database")
+    .AddCheck<OutboxHealthCheck>("outbox");
 
 var app = builder.Build();
 
-// Apply database migrations automatically (development only)
-if (app.Environment.IsDevelopment())
+// Apply database migrations based on configuration flag
+var runMigrations = builder.Configuration.GetValue<bool>("Database:RunMigrationsOnStartup", false);
+if (runMigrations)
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
@@ -48,6 +50,10 @@ if (app.Environment.IsDevelopment())
         app.Logger.LogError(ex, "An error occurred while migrating the database.");
         throw;
     }
+}
+else
+{
+    app.Logger.LogInformation("Auto-migration disabled (Database:RunMigrationsOnStartup = false)");
 }
 
 // Configure the HTTP request pipeline

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Payments.EventDriven.Application.Interfaces;
+using Payments.EventDriven.Infrastructure.HealthChecks;
 using Payments.EventDriven.Infrastructure.Messaging;
 using Payments.EventDriven.Infrastructure.Persistence;
 using Payments.EventDriven.Infrastructure.Persistence.Repositories;
@@ -15,6 +16,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // PostgreSQL para persistência transacional
         services.AddDbContext<PaymentDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -23,24 +25,22 @@ public static class DependencyInjection
                     maxRetryDelay: TimeSpan.FromSeconds(5),
                     errorCodesToAdd: null)));
 
+        // Kafka
         var kafkaSettings = new KafkaSettings();
         configuration.GetSection("Kafka").Bind(kafkaSettings);
         services.AddSingleton(kafkaSettings);
 
+        // Repositories
         services.AddScoped<IPaymentRepository, PaymentRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        
+        // Messaging
         services.AddSingleton<IEventPublisher, KafkaProducer>();
 
-        return services;
-    }
+        // Health checks
+        services.AddTransient<OutboxHealthCheck>();
 
-    /// <summary>
-    /// Registers the OutboxPublisherService. Call this only in the API project.
-    /// </summary>
-    public static IServiceCollection AddOutboxPublisher(this IServiceCollection services)
-    {
-        services.AddHostedService<OutboxPublisherService>();
         return services;
     }
 }

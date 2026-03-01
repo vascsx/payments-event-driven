@@ -10,41 +10,57 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
     {
         builder.ToTable("outbox_messages");
 
-        builder.HasKey(m => m.Id);
+        builder.HasKey(o => o.Id);
 
-        builder.Property(m => m.Id)
+        builder.Property(o => o.Id)
             .HasColumnName("id");
 
-        builder.Property(m => m.Topic)
+        builder.Property(o => o.Topic)
             .HasColumnName("topic")
-            .HasMaxLength(200)
+            .HasMaxLength(255)
             .IsRequired();
 
-        builder.Property(m => m.MessageKey)
+        builder.Property(o => o.MessageKey)
             .HasColumnName("message_key")
-            .HasMaxLength(100)
+            .HasMaxLength(255)
             .IsRequired();
 
-        builder.Property(m => m.Payload)
+        builder.Property(o => o.Payload)
             .HasColumnName("payload")
+            .HasColumnType("text")
             .IsRequired();
 
-        builder.Property(m => m.CreatedAt)
+        builder.Property(o => o.CorrelationId)
+            .HasColumnName("correlation_id")
+            .HasMaxLength(255);
+
+        builder.Property(o => o.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();
 
-        builder.Property(m => m.ProcessedAt)
+        builder.Property(o => o.ProcessedAt)
             .HasColumnName("processed_at");
 
-        builder.Property(m => m.RetryCount)
+        builder.Property(o => o.RetryCount)
             .HasColumnName("retry_count")
-            .HasDefaultValue(0);
+            .IsRequired();
 
-        builder.Property(m => m.CorrelationId)
-            .HasColumnName("correlation_id")
-            .HasMaxLength(100);
+        builder.Property(o => o.LastRetryAt)
+            .HasColumnName("last_retry_at");
 
-        builder.HasIndex(m => m.ProcessedAt)
-            .HasFilter("processed_at IS NULL");
+        builder.Property(o => o.LastError)
+            .HasColumnName("last_error")
+            .HasColumnType("text");
+
+        builder.Property(o => o.Status)
+            .HasColumnName("status")
+            .IsRequired();
+
+        // Índices para otimizar queries do processor
+        builder.HasIndex(o => new { o.Status, o.CreatedAt })
+            .HasDatabaseName("idx_outbox_status_created");
+
+        builder.HasIndex(o => o.ProcessedAt)
+            .HasDatabaseName("idx_outbox_processed_at");
     }
 }

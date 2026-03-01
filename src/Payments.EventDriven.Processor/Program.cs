@@ -19,7 +19,7 @@ public class Program
 
         builder.Services.AddApplication();
         builder.Services.AddInfrastructure(builder.Configuration);
-        builder.Services.AddHostedService<PaymentConsumerWorker>();
+        builder.Services.AddHostedService<OutboxProcessorWorker>();
 
         var host = builder.Build();
         host.Run();

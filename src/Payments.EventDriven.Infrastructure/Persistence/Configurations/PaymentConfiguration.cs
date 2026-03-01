@@ -28,6 +28,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.Status)
             .HasColumnName("status")
             .IsRequired();
+        
+        builder.Property(p => p.FailureReason)
+            .HasColumnName("failure_reason")
+            .HasColumnType("text");
 
         builder.Property(p => p.CreatedAt)
             .HasColumnName("created_at")
