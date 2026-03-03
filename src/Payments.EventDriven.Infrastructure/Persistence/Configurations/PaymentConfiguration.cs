@@ -31,6 +31,16 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .IsRequired()
             .HasDefaultValue(PaymentType.Default); 
 
+        builder.Property(p => p.IdempotencyKey)
+            .HasColumnName("idempotency_key")
+            .HasMaxLength(255);
+
+        // Índice único para prevenir pagamentos duplicados
+        builder.HasIndex(p => p.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("idempotency_key IS NOT NULL")
+            .HasDatabaseName("idx_payment_idempotency_key");
+
         builder.Property(p => p.Status)
             .HasColumnName("status")
             .IsRequired();

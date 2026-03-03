@@ -11,17 +11,19 @@ public class Payment : IEntity
     public string Currency { get; private set; } = string.Empty;
     public PaymentType Type { get; private set; }
     public PaymentStatus Status { get; private set; }
+    public string? IdempotencyKey { get; private set; } 
     public DateTime CreatedAt { get; private set; }
     public string? FailureReason { get; private set; }
 
     private Payment() { } // EF Core
 
-    public Payment(decimal amount, string currency, PaymentType type = PaymentType.Default)
+    public Payment(decimal amount, string currency, PaymentType type = PaymentType.Default, string? idempotencyKey = null)
     {
         Id = Guid.CreateVersion7();
         Amount = amount;
         Currency = currency;
         Type = type;
+        IdempotencyKey = idempotencyKey;
         Status = PaymentStatus.Pending;
         CreatedAt = DateTime.UtcNow;
 

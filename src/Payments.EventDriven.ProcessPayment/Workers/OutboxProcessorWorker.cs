@@ -6,7 +6,7 @@ using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Domain.Entities;
 using Payments.EventDriven.Infrastructure.Persistence;
 
-namespace Payments.EventDriven.Processor.Workers;
+namespace Payments.EventDriven.ProcessPayment.Workers;
 
 /// <summary>
 /// Background service que processa mensagens do Outbox Pattern
@@ -155,8 +155,20 @@ public class OutboxProcessorWorker : BackgroundService
 
                             _logger.LogError(ex,
                                 "Outbox message {OutboxId} exceeded {MaxRetries} retries and marked as Failed. " +
-                                "Topic: {Topic}, Key: {Key}, CorrelationId: {CorrelationId}",
+                                "Topic: {Topic}, Key: {Key}, CorrelationId: {CorrelationId}. Sending to DLQ.",
                                 message.Id, MaxRetries, message.Topic, message.MessageKey, message.CorrelationId);
+
+                            // Envia para DLQ para análise posterior
+                            try
+                            {
+                                await SendFailedMessageToDlqAsync(message, eventPublisher, cancellationToken);
+                            }
+                            catch (Exception dlqEx)
+                            {
+                                _logger.LogCritical(dlqEx,
+                                    "CRITICAL: Failed to send outbox message {OutboxId} to DLQ after {MaxRetries} retries!",
+                                    message.Id, MaxRetries);
+                            }
                         }
                         else
                         {
@@ -192,5 +204,42 @@ public class OutboxProcessorWorker : BackgroundService
                 throw; // Re-throw para a estratégia de execução lidar com retry se necessário
             }
         });
+    }
+
+    /// <summary>
+    /// Envia mensagens do outbox que falharam permanentemente para DLQ
+    /// </summary>
+    private async Task SendFailedMessageToDlqAsync(
+        OutboxMessage message,
+        IEventPublisher eventPublisher,
+        CancellationToken cancellationToken)
+    {
+        var dlqTopic = $"{message.Topic}-outbox-dlq";
+
+        var headers = new Dictionary<string, string>
+        {
+            ["dlq-reason"] = message.LastError ?? "Max retries exceeded",
+            ["dlq-original-topic"] = message.Topic,
+            ["dlq-outbox-id"] = message.Id.ToString(),
+            ["dlq-retry-count"] = message.RetryCount.ToString(),
+            ["dlq-timestamp"] = DateTime.UtcNow.ToString("O"),
+            ["event-type"] = message.EventType
+        };
+
+        if (message.CorrelationId is not null)
+        {
+            headers["X-Correlation-Id"] = message.CorrelationId;
+        }
+
+        await eventPublisher.PublishAsync(
+            dlqTopic,
+            message.MessageKey,
+            message.Payload,
+            headers,
+            cancellationToken);
+
+        _logger.LogWarning(
+            "Outbox message {OutboxId} sent to DLQ topic {DlqTopic}. Original topic: {Topic}",
+            message.Id, dlqTopic, message.Topic);
     }
 }

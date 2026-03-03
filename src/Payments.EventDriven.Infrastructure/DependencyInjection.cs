@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Infrastructure.HealthChecks;
 using Payments.EventDriven.Infrastructure.Messaging;
+using Payments.EventDriven.Infrastructure.Observability;
 using Payments.EventDriven.Infrastructure.Persistence;
 using Payments.EventDriven.Infrastructure.Persistence.Repositories;
 using Payments.EventDriven.Infrastructure.Settings;
@@ -40,6 +41,9 @@ public static class DependencyInjection
 
         // Health checks
         services.AddTransient<OutboxHealthCheck>();
+
+        // Observability - Metrics
+        services.AddSingleton<IMetricsService, LogBasedMetricsService>();
 
         return services;
     }

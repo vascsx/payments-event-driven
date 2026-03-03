@@ -92,31 +92,11 @@ services:
     networks:
       - payments-network
 
-  outbox-processor:
-    build:
-      context: .
-      dockerfile: src/Payments.EventDriven.Processor/Dockerfile
-    container_name: payments-outbox-processor
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=paymentsdb;Username=postgres;Password=postgres
-      Kafka__BootstrapServers: kafka:29092
-      Kafka__Topic: payment-created
-      Kafka__GroupId: payment-processor-group
-    networks:
-      - payments-network
-
-  process-payment:
+  workers:
     build:
       context: .
       dockerfile: src/Payments.EventDriven.ProcessPayment/Dockerfile
-    container_name: payments-process-payment
+    container_name: payments-workers
     restart: always
     depends_on:
       postgres:
@@ -128,7 +108,7 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=paymentsdb;Username=postgres;Password=postgres
       Kafka__BootstrapServers: kafka:29092
       Kafka__Topic: payment-created
-      Kafka__GroupId: process-payment-group
+      Kafka__GroupId: payment-workers-group
     networks:
       - payments-network
 

@@ -12,7 +12,9 @@ builder.Services.Configure<HostOptions>(options =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+builder.Services.AddHostedService<OutboxProcessorWorker>();
 builder.Services.AddHostedService<EventRouterWorker>();
+builder.Services.AddHostedService<DlqMonitorWorker>();
 
 var host = builder.Build();
 host.Run();

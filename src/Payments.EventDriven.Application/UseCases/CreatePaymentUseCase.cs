@@ -32,7 +32,27 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
         CancellationToken cancellationToken,
         string? correlationId = null)
     {
-        var payment = new Payment(request.Amount, request.Currency.ToUpperInvariant());
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existingPayment = await _repository.GetByIdempotencyKeyAsync(
+                request.IdempotencyKey, 
+                cancellationToken);
+
+            if (existingPayment is not null)
+            {
+                _logger.LogInformation(
+                    "Payment with idempotency key {IdempotencyKey} already exists with id {PaymentId}. Returning existing payment (idempotent).",
+                    request.IdempotencyKey, existingPayment.Id);
+                
+                return existingPayment.Id;
+            }
+        }
+
+        var payment = new Payment(
+            request.Amount, 
+            request.Currency.ToUpperInvariant(), 
+            request.Type,
+            request.IdempotencyKey);
 
         var @event = new PaymentCreatedEvent
         {
@@ -40,24 +60,31 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
             Amount = payment.Amount,
             Currency = payment.Currency,
             CreatedAt = payment.CreatedAt,
-            Version = 1
+            CorrelationId = correlationId
         };
 
         var payload = JsonSerializer.Serialize(@event);
         var topic = KafkaTopics.PaymentCreated;
         var messageKey = payment.Id.ToString();
+        
+        var eventType = payment.Type switch
+        {
+            Domain.Enums.PaymentType.Darf => "darf-payment-created",
+            Domain.Enums.PaymentType.Darj => "darj-payment-created",
+            _ => "payment-created"
+        };
 
         // Persiste pagamento e evento no outbox na mesma transação (Outbox Pattern)
         await _repository.AddAsync(payment, cancellationToken);
         
-        var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId);
+        var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId, eventType);
         await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Payment {PaymentId} created and event persisted to outbox with id {OutboxId}",
-            payment.Id, outboxMessage.Id);
+            "Payment {PaymentId} of type {PaymentType} created and event {EventType} persisted to outbox with id {OutboxId}. IdempotencyKey: {IdempotencyKey}",
+            payment.Id, payment.Type, eventType, outboxMessage.Id, payment.IdempotencyKey ?? "<none>");
 
         return payment.Id;
     }

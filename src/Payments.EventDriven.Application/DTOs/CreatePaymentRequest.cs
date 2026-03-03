@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using Payments.EventDriven.Domain.Enums;
 
 namespace Payments.EventDriven.Application.DTOs;
 
@@ -11,4 +12,10 @@ public class CreatePaymentRequest
     [Required]
     [RegularExpression(@"^[A-Z]{3}$", ErrorMessage = "Currency must be a valid ISO 4217 code (e.g. USD, EUR, BRL).")]
     public string Currency { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Tipo do pagamento - determina qual handler processará o evento
+    /// </summary>
+    public PaymentType Type { get; set; } = PaymentType.Default;
+    public string? IdempotencyKey { get; set; }
 }

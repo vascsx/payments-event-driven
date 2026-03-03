@@ -25,6 +25,13 @@ public class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
+    public async Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken)
+    {
+        return await _context.Payments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey, cancellationToken);
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var payment = await _context.Payments
