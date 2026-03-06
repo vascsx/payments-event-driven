@@ -32,6 +32,7 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
         CancellationToken cancellationToken,
         string? correlationId = null)
     {
+        // Idempotency check outside transaction (read-only operation)
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var existingPayment = await _repository.GetByIdempotencyKeyAsync(
@@ -48,44 +49,44 @@ public class CreatePaymentUseCase : ICreatePaymentUseCase
             }
         }
 
-        var payment = new Payment(
-            request.Amount, 
-            request.Currency.ToUpperInvariant(), 
-            request.Type,
-            request.IdempotencyKey);
-
-        var @event = new PaymentCreatedEvent
+        return await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            PaymentId = payment.Id,
-            Amount = payment.Amount,
-            Currency = payment.Currency,
-            CreatedAt = payment.CreatedAt,
-            CorrelationId = correlationId
-        };
+            var payment = new Payment(
+                request.Amount, 
+                request.Currency.ToUpperInvariant(), 
+                request.Type,
+                request.IdempotencyKey);
 
-        var payload = JsonSerializer.Serialize(@event);
-        var topic = KafkaTopics.PaymentCreated;
-        var messageKey = payment.Id.ToString();
-        
-        var eventType = payment.Type switch
-        {
-            Domain.Enums.PaymentType.Darf => "darf-payment-created",
-            Domain.Enums.PaymentType.Darj => "darj-payment-created",
-            _ => "payment-created"
-        };
+            var @event = new PaymentCreatedEvent
+            {
+                PaymentId = payment.Id,
+                Amount = payment.Amount,
+                Currency = payment.Currency,
+                CreatedAt = payment.CreatedAt,
+                CorrelationId = correlationId
+            };
 
-        // Persiste pagamento e evento no outbox na mesma transação (Outbox Pattern)
-        await _repository.AddAsync(payment, cancellationToken);
-        
-        var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId, eventType);
-        await _outboxRepository.AddAsync(outboxMessage, cancellationToken);
+            var payload = JsonSerializer.Serialize(@event);
+            var topic = KafkaTopics.PaymentCreated;
+            var messageKey = payment.Id.ToString();
+            
+            var eventType = payment.Type switch
+            {
+                Domain.Enums.PaymentType.Darf => "darf-payment-created",
+                Domain.Enums.PaymentType.Darj => "darj-payment-created",
+                _ => "payment-created"
+            };
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _repository.AddAsync(payment, ct);
+            
+            var outboxMessage = new OutboxMessage(topic, messageKey, payload, correlationId, eventType);
+            await _outboxRepository.AddAsync(outboxMessage, ct);
 
-        _logger.LogInformation(
-            "Payment {PaymentId} of type {PaymentType} created and event {EventType} persisted to outbox with id {OutboxId}. IdempotencyKey: {IdempotencyKey}",
-            payment.Id, payment.Type, eventType, outboxMessage.Id, payment.IdempotencyKey ?? "<none>");
+            _logger.LogInformation(
+                "Payment {PaymentId} of type {PaymentType} created and event {EventType} persisted to outbox with id {OutboxId}. IdempotencyKey: {IdempotencyKey}",
+                payment.Id, payment.Type, eventType, outboxMessage.Id, payment.IdempotencyKey ?? "<none>");
 
-        return payment.Id;
+            return payment.Id;
+        }, cancellationToken);
     }
 }

@@ -36,11 +36,12 @@ public static class DependencyInjection
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         
-        // Messaging
-        services.AddSingleton<IEventPublisher, KafkaProducer>();
+        // Messaging - Kafka with Circuit Breaker for resilience
+        services.AddSingleton<IEventPublisher, ResilientKafkaProducer>();
 
         // Health checks
         services.AddTransient<OutboxHealthCheck>();
+        services.AddTransient<ClockSkewHealthCheck>();
 
         // Observability - Metrics
         services.AddSingleton<IMetricsService, LogBasedMetricsService>();

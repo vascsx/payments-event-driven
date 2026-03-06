@@ -17,11 +17,13 @@ public class KafkaProducer : IEventPublisher, IDisposable
         {
             BootstrapServers = settings.Value.BootstrapServers,
             Acks = Acks.All,
-            EnableIdempotence = true,
-            MessageSendMaxRetries = 3,
-            MaxInFlight = 1,  
+            EnableIdempotence = true,           
+            MessageSendMaxRetries = int.MaxValue, 
+            MaxInFlight = 5,                    
             MessageTimeoutMs = 120000,
-            LingerMs = 5
+            LingerMs = 5,
+            RetryBackoffMs = 100,
+            RequestTimeoutMs = 30000
         };
 
         _producer = new ProducerBuilder<string, string>(config).Build();
@@ -47,7 +49,14 @@ public class KafkaProducer : IEventPublisher, IDisposable
                 kafkaMessage.Headers.Add(k, Encoding.UTF8.GetBytes(v));
         }
 
-        await _producer.ProduceAsync(topic, kafkaMessage, cancellationToken);
+        var deliveryReport = await _producer.ProduceAsync(topic, kafkaMessage, cancellationToken);
+        
+        if (deliveryReport.Status != PersistenceStatus.Persisted)
+        {
+            throw new InvalidOperationException(
+                $"Kafka did not persist message. Status: {deliveryReport.Status}, " +
+                $"Topic: {topic}, Partition: {deliveryReport.Partition}, Key: {key}");
+        }
     }
 
     public void Dispose()

@@ -22,7 +22,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Health checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<PaymentDbContext>("database")
-    .AddCheck<OutboxHealthCheck>("outbox");
+    .AddCheck<OutboxHealthCheck>("outbox")
+    .AddCheck<ClockSkewHealthCheck>("clock_sync");
 
 var app = builder.Build();
 

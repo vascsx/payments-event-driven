@@ -69,6 +69,19 @@ services:
     networks:
       - payments-network
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: payments-portainer
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - payments-network
+
   api:
     build:
       context: .
@@ -118,3 +131,4 @@ networks:
 
 volumes:
   postgres-data:
+  portainer-data:

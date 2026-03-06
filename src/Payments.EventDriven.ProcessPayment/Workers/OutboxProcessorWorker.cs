@@ -99,16 +99,17 @@ public class OutboxProcessorWorker : BackgroundService
                 {
                     try
                     {
-                        // Verifica backoff exponencial antes de tentar retry
                         if (message.RetryCount > 0)
                         {
-                            var delaySeconds = Math.Min(Math.Pow(2, message.RetryCount), 3600); // Max 1 hora
+                            var baseDelay = Math.Pow(2, message.RetryCount);
+                            var jitter = Random.Shared.NextDouble() * 0.3 * baseDelay; 
+                            var delaySeconds = Math.Min(baseDelay + jitter, 3600); 
                             var timeSinceLastRetry = DateTime.UtcNow - (message.LastRetryAt ?? message.CreatedAt);
 
                             if (timeSinceLastRetry.TotalSeconds < delaySeconds)
                             {
                                 _logger.LogDebug(
-                                    "Outbox message {Id} not ready for retry yet (waiting {Delay}s)",
+                                    "Outbox message {Id} not ready for retry yet (waiting {Delay:F1}s with jitter)",
                                     message.Id, delaySeconds);
                                 skippedCount++;
                                 continue;

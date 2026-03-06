@@ -23,29 +23,31 @@ public class ProcessPaymentUseCase : IProcessPaymentUseCase
 
     public async Task<ProcessPaymentResult> ProcessAsync(Guid paymentId, CancellationToken cancellationToken)
     {
-        var payment = await _repository.GetByIdAsync(paymentId, cancellationToken);
-
-        if (payment is null)
+        return await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            _logger.LogWarning("Payment {PaymentId} not yet visible in database, likely replication lag", paymentId);
-            throw new PaymentNotYetVisibleException(paymentId);
-        }
+            var payment = await _repository.GetByIdAsync(paymentId, ct);
 
-        if (payment.Status != PaymentStatus.Pending)
-        {
+            if (payment is null)
+            {
+                _logger.LogWarning("Payment {PaymentId} not yet visible in database, likely replication lag", paymentId);
+                throw new PaymentNotYetVisibleException(paymentId);
+            }
+
+            if (payment.Status != PaymentStatus.Pending)
+            {
+                _logger.LogInformation(
+                    "Payment {PaymentId} already in status {Status}, skipping processing (idempotent)",
+                    paymentId, payment.Status);
+                return ProcessPaymentResult.AlreadyProcessed;
+            }
+
+            payment.MarkAsProcessed();
+
             _logger.LogInformation(
-                "Payment {PaymentId} already in status {Status}, skipping processing (idempotent)",
-                paymentId, payment.Status);
-            return ProcessPaymentResult.AlreadyProcessed;
-        }
+                "Payment {PaymentId} marked as Processed successfully",
+                paymentId);
 
-        payment.MarkAsProcessed();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Payment {PaymentId} marked as Processed. Amount: {Amount} {Currency}",
-            paymentId, payment.Amount, payment.Currency);
-
-        return ProcessPaymentResult.Processed;
+            return ProcessPaymentResult.Processed;
+        }, cancellationToken);
     }
 }
