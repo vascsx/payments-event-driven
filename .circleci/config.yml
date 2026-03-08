@@ -123,16 +123,22 @@ jobs:
           name: Run E2E Tests
           command: |
             cd src/Payments.EventDriven.E2E
-            npx playwright test --reporter=list
+            npx playwright test
+          when: always
       
-      # Store test results
+      # Store test results (JUnit XML para métricas do CircleCI)
       - store_test_results:
           path: src/Payments.EventDriven.E2E/test-results
       
-      # Store artifacts (screenshots, videos, etc.)
+      # Store HTML report (dashboard interativo)
+      - store_artifacts:
+          path: src/Payments.EventDriven.E2E/playwright-report
+          destination: playwright-report
+      
+      # Store test artifacts (screenshots, videos, traces)
       - store_artifacts:
           path: src/Payments.EventDriven.E2E/test-results
-          destination: test-results
+          destination: test-artifacts
       
       # Cleanup
       - run:
