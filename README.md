@@ -1001,8 +1001,6 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 <div align="center">
 
-**Desenvolvido com ❤️ usando .NET 10, PostgreSQL e Apache Kafka**
-
 ⭐ **Se este projeto foi útil, deixe uma estrela no repositório!**
 
 </div>
