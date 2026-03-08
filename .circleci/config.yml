@@ -76,13 +76,12 @@ jobs:
             - npm-packages-v1-{{ checksum "src/Payments.EventDriven.E2E/package.json" }}
             - npm-packages-v1-
       
-      # Install Playwright and dependencies
+      # Install Playwright dependencies
       - run:
           name: Install E2E Test Dependencies
           command: |
             cd src/Payments.EventDriven.E2E
             npm install
-            npx playwright install --with-deps chromium
       
       # Save npm cache
       - save_cache:
