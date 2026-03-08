@@ -29,6 +29,14 @@ public class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<Payment?> GetByIdWithoutLockAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return await _context.Payments
+            .Where(p => p.Id == id)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken)
     {
         return await _context.Payments

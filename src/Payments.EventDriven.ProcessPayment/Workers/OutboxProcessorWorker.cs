@@ -137,10 +137,9 @@ public class OutboxProcessorWorker : BackgroundService
                             headers,
                             cancellationToken);
 
-                        // Sucesso! Marca como processada
                         processedCount++;
                         message.MarkAsProcessed();
-                        context.Update(message); // Garante que o EF rastreie as mudanças
+                        context.Update(message); 
 
                         _logger.LogInformation(
                             "Outbox message {OutboxId} successfully published to {Topic} after {Retries} retries. CorrelationId: {CorrelationId}",
@@ -148,18 +147,52 @@ public class OutboxProcessorWorker : BackgroundService
                     }
                     catch (Exception ex)
                     {
+                        if (IsInfrastructureFailure(ex))
+                        {
+                            _logger.LogWarning(ex,
+                                "Infrastructure failure for outbox message {OutboxId}. Will retry without incrementing counter. Error: {Error}",
+                                message.Id, ex.Message);
+                            
+                            skippedCount++;
+                            continue;
+                        }
+
                         message.IncrementRetry(ex.Message);
 
                         if (message.RetryCount >= MaxRetries)
                         {
                             message.MarkAsFailed(ex.Message);
 
+                            try
+                            {
+                                if (Guid.TryParse(message.MessageKey, out var paymentId))
+                                {
+                                    var payment = await context.Payments
+                                        .FirstOrDefaultAsync(p => p.Id == paymentId, cancellationToken);
+
+                                    if (payment != null && payment.Status == Domain.Enums.PaymentStatus.Pending)
+                                    {
+                                        payment.MarkAsFailed($"Failed to publish event after {MaxRetries} retries: {ex.Message}");
+                                        context.Payments.Update(payment);
+                                        
+                                        _logger.LogWarning(
+                                            "Payment {PaymentId} marked as Failed due to outbox message failure. CorrelationId: {CorrelationId}",
+                                            paymentId, message.CorrelationId);
+                                    }
+                                }
+                            }
+                            catch (Exception paymentEx)
+                            {
+                                _logger.LogError(paymentEx,
+                                    "Failed to mark Payment {MessageKey} as Failed. Outbox message will be marked as Failed anyway.",
+                                    message.MessageKey);
+                            }
+
                             _logger.LogError(ex,
                                 "Outbox message {OutboxId} exceeded {MaxRetries} retries and marked as Failed. " +
                                 "Topic: {Topic}, Key: {Key}, CorrelationId: {CorrelationId}. Sending to DLQ.",
                                 message.Id, MaxRetries, message.Topic, message.MessageKey, message.CorrelationId);
 
-                            // Envia para DLQ para análise posterior
                             try
                             {
                                 await SendFailedMessageToDlqAsync(message, eventPublisher, cancellationToken);
@@ -196,6 +229,8 @@ public class OutboxProcessorWorker : BackgroundService
                 {
                     await tx.RollbackAsync(cancellationToken);
                     _logger.LogDebug("All messages in backoff, skipping batch");
+                    
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -242,5 +277,19 @@ public class OutboxProcessorWorker : BackgroundService
         _logger.LogWarning(
             "Outbox message {OutboxId} sent to DLQ topic {DlqTopic}. Original topic: {Topic}",
             message.Id, dlqTopic, message.Topic);
+    }
+
+    /// <summary>
+    /// Determines if an exception is due to infrastructure failure (not business logic).
+    /// Infrastructure failures should not count against retry limits.
+    /// </summary>
+    private static bool IsInfrastructureFailure(Exception ex)
+    {
+        return ex.Message.Contains("circuit breaker is OPEN", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("did not persist", StringComparison.OrdinalIgnoreCase)
+            || ex is Confluent.Kafka.KafkaException
+            || ex is TimeoutException
+            || ex.Message.Contains("Kafka", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("broker", StringComparison.OrdinalIgnoreCase);
     }
 }

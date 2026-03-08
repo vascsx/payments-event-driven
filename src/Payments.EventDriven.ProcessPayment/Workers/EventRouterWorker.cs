@@ -32,7 +32,9 @@ public class EventRouterWorker : BackgroundService
     private IConsumer<string, string>? _consumer;
 
     private const int MaxRetries = 3;
+    private const int MaxConcurrentMessages = 10; 
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
+    private readonly SemaphoreSlim _processingLimiter = new(MaxConcurrentMessages, MaxConcurrentMessages);
 
     // Metrics
     private long _messagesProcessed = 0;
@@ -58,15 +60,18 @@ public class EventRouterWorker : BackgroundService
             GroupId = _kafkaSettings.GroupId,
             AutoOffsetReset = AutoOffsetReset.Earliest,
             EnableAutoCommit = false,
-            EnableAutoOffsetStore = false
+            EnableAutoOffsetStore = false,
+            MaxPollIntervalMs = 300000
         };
 
         _consumer = new ConsumerBuilder<string, string>(config).Build();
         _consumer.Subscribe(_kafkaSettings.Topic);
 
         _logger.LogInformation(
-            "EventRouterWorker started - consuming from topic {Topic} with group {GroupId}",
-            _kafkaSettings.Topic, _kafkaSettings.GroupId);
+            "EventRouterWorker started - consuming from topic {Topic} with group {GroupId}, max concurrency: {MaxConcurrency}",
+            _kafkaSettings.Topic, _kafkaSettings.GroupId, MaxConcurrentMessages);
+
+        var activeTasks = new List<Task>();
 
         try
         {
@@ -74,34 +79,43 @@ public class EventRouterWorker : BackgroundService
             {
                 try
                 {
-                    var consumeResult = _consumer.Consume(stoppingToken);
+                    activeTasks.RemoveAll(t => t.IsCompleted);
+
+                    var consumeResult = _consumer.Consume(TimeSpan.FromMilliseconds(100));
 
                     if (consumeResult?.Message == null)
                         continue;
 
-                    var processResult = await ProcessMessageWithRetryAsync(consumeResult, stoppingToken);
+                    await _processingLimiter.WaitAsync(stoppingToken);
 
-                    // CRITICAL: Só commita se o processamento foi bem-sucedido
-                    if (processResult == ProcessingResult.Success)
+                    var processingTask = Task.Run(async () =>
                     {
-                        _consumer.Commit(consumeResult);
-                        _consumer.StoreOffset(consumeResult);
-                    }
-                    else if (processResult == ProcessingResult.SentToDlq)
-                    {
-                        // Mensagem foi enviada para DLQ, pode commitar o offset
-                        _consumer.Commit(consumeResult);
-                        _consumer.StoreOffset(consumeResult);
-                    }
-                    else // ProcessingResult.Failed - não commita, será reprocessado
-                    {
-                        _logger.LogWarning(
-                            "Message processing failed, offset will NOT be committed. Partition {Partition}, Offset {Offset}",
-                            consumeResult.Partition.Value, consumeResult.Offset.Value);
-                        
-                        // Pausa para evitar loop infinito rápido
-                        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-                    }
+                        try
+                        {
+                            var processResult = await ProcessMessageWithRetryAsync(consumeResult, stoppingToken);
+
+                            lock (_consumer)
+                            {
+                                if (processResult == ProcessingResult.Success || processResult == ProcessingResult.SentToDlq)
+                                {
+                                    _consumer.Commit(consumeResult);
+                                    _consumer.StoreOffset(consumeResult);
+                                }
+                                else
+                                {
+                                    _logger.LogWarning(
+                                        "Message processing failed, offset will NOT be committed. Partition {Partition}, Offset {Offset}",
+                                        consumeResult.Partition.Value, consumeResult.Offset.Value);
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            _processingLimiter.Release();
+                        }
+                    }, stoppingToken);
+
+                    activeTasks.Add(processingTask);
                 }
                 catch (ConsumeException ex)
                 {
@@ -117,11 +131,18 @@ public class EventRouterWorker : BackgroundService
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 }
             }
+
+            if (activeTasks.Count > 0)
+            {
+                _logger.LogInformation("Waiting for {Count} active processing tasks to complete...", activeTasks.Count);
+                await Task.WhenAll(activeTasks);
+            }
         }
         finally
         {
             _consumer.Close();
             _consumer.Dispose();
+            _processingLimiter.Dispose();
             
             _logger.LogInformation(
                 "EventRouterWorker stopped. Final metrics - Processed: {Processed}, Failed: {Failed}, Retried: {Retried}, SentToDlq: {Dlq}",
@@ -179,11 +200,18 @@ public class EventRouterWorker : BackgroundService
 
     private static bool IsTransientError(Exception ex)
     {
+        var exceptionType = ex.GetType();
+        if (exceptionType.Name == "PaymentNotYetVisibleException")
+        {
+            return true;
+        }
+
         return ex is TimeoutException
             || ex is OperationCanceledException
             || ex.Message.Contains("connection", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("temporarily unavailable", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("not yet visible", StringComparison.OrdinalIgnoreCase)
             || ex.InnerException is TimeoutException;
     }
 

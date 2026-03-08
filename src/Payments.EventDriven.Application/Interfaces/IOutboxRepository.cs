@@ -19,6 +19,11 @@ public interface IOutboxRepository
     Task<IEnumerable<OutboxMessage>> GetPendingMessagesAsync(int maxRetries, int limit, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Busca mensagens pendentes do outbox para um pagamento específico (usado ao deletar pagamento)
+    /// </summary>
+    Task<IEnumerable<OutboxMessage>> GetPendingMessagesByPaymentIdAsync(Guid paymentId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Atualiza uma mensagem após tentativa de processamento
     /// </summary>
     Task UpdateAsync(OutboxMessage message, CancellationToken cancellationToken = default);

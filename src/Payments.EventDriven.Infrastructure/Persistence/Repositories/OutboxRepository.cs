@@ -30,6 +30,16 @@ public class OutboxRepository : IOutboxRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<OutboxMessage>> GetPendingMessagesByPaymentIdAsync(
+        Guid paymentId, 
+        CancellationToken cancellationToken = default)
+    {
+        var paymentIdString = paymentId.ToString();
+        return await _context.OutboxMessages
+            .Where(m => m.MessageKey == paymentIdString && m.Status == OutboxMessageStatus.Pending)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task UpdateAsync(OutboxMessage message, CancellationToken cancellationToken = default)
     {
         _context.OutboxMessages.Update(message);
