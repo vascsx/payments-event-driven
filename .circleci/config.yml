@@ -1,0 +1,148 @@
+version: 2.1
+
+orbs:
+  docker: circleci/docker@2.2.0
+
+jobs:
+  build-and-test:
+    machine:
+      image: ubuntu-2204:2024.01.1
+    resource_class: large
+    
+    steps:
+      - checkout
+      
+      # Setup .NET SDK
+      - run:
+          name: Install .NET SDK 10
+          command: |
+            wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+            chmod +x dotnet-install.sh
+            ./dotnet-install.sh --channel 10.0 --install-dir $HOME/.dotnet
+            echo 'export PATH=$HOME/.dotnet:$PATH' >> $BASH_ENV
+            echo 'export DOTNET_ROOT=$HOME/.dotnet' >> $BASH_ENV
+            source $BASH_ENV
+      
+      - run:
+          name: Verify .NET Installation
+          command: |
+            dotnet --version
+            dotnet --list-sdks
+      
+      # Cache NuGet packages
+      - restore_cache:
+          keys:
+            - nuget-packages-v1-{{ checksum "src/Payments.EventDriven.Api/Payments.EventDriven.Api.csproj" }}-{{ checksum "src/Payments.EventDriven.Application/Payments.EventDriven.Application.csproj" }}
+            - nuget-packages-v1-
+      
+      # Restore NuGet packages
+      - run:
+          name: Restore Dependencies
+          command: |
+            dotnet restore src/Payments.EventDriven.Api/Payments.EventDriven.Api.csproj
+            dotnet restore src/Payments.EventDriven.Application/Payments.EventDriven.Application.csproj
+            dotnet restore src/Payments.EventDriven.Domain/Payments.EventDriven.Domain.csproj
+            dotnet restore src/Payments.EventDriven.Infrastructure/Payments.EventDriven.Infrastructure.csproj
+            dotnet restore src/Payments.EventDriven.ProcessPayment/Payments.EventDriven.ProcessPayment.csproj
+      
+      # Save NuGet packages cache
+      - save_cache:
+          key: nuget-packages-v1-{{ checksum "src/Payments.EventDriven.Api/Payments.EventDriven.Api.csproj" }}-{{ checksum "src/Payments.EventDriven.Application/Payments.EventDriven.Application.csproj" }}
+          paths:
+            - ~/.nuget/packages
+      
+      # Build all projects
+      - run:
+          name: Build Projects
+          command: |
+            dotnet build src/Payments.EventDriven.Domain/Payments.EventDriven.Domain.csproj --configuration Release --no-restore
+            dotnet build src/Payments.EventDriven.Application/Payments.EventDriven.Application.csproj --configuration Release --no-restore
+            dotnet build src/Payments.EventDriven.Infrastructure/Payments.EventDriven.Infrastructure.csproj --configuration Release --no-restore
+            dotnet build src/Payments.EventDriven.Api/Payments.EventDriven.Api.csproj --configuration Release --no-restore
+            dotnet build src/Payments.EventDriven.ProcessPayment/Payments.EventDriven.ProcessPayment.csproj --configuration Release --no-restore
+      
+      # Setup Node.js for E2E tests
+      - run:
+          name: Install Node.js and npm
+          command: |
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            node --version
+            npm --version
+      
+      # Cache npm packages
+      - restore_cache:
+          keys:
+            - npm-packages-v1-{{ checksum "src/Payments.EventDriven.E2E/package.json" }}
+            - npm-packages-v1-
+      
+      # Install Playwright and dependencies
+      - run:
+          name: Install E2E Test Dependencies
+          command: |
+            cd src/Payments.EventDriven.E2E
+            npm install
+            npx playwright install --with-deps chromium
+      
+      # Save npm cache
+      - save_cache:
+          key: npm-packages-v1-{{ checksum "src/Payments.EventDriven.E2E/package.json" }}
+          paths:
+            - src/Payments.EventDriven.E2E/node_modules
+            - ~/.cache/ms-playwright
+      
+      # Start services with Docker Compose
+      - run:
+          name: Start Docker Compose Services
+          command: |
+            docker-compose up -d
+      
+      # Wait for services to be healthy
+      - run:
+          name: Wait for Services
+          command: |
+            echo "Waiting for PostgreSQL..."
+            timeout 120 bash -c 'until docker exec payments-postgres pg_isready -U postgres; do sleep 2; done'
+            
+            echo "Waiting for Kafka..."
+            timeout 120 bash -c 'until docker exec payments-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; do sleep 5; done'
+            
+            echo "Waiting for API..."
+            timeout 120 bash -c 'until curl -f http://localhost:8080/health > /dev/null 2>&1; do sleep 5; done'
+            
+            echo "All services are ready!"
+      
+      # Show service logs for debugging
+      - run:
+          name: Show Service Logs
+          command: |
+            docker-compose logs --tail=50
+          when: on_fail
+      
+      # Run E2E tests
+      - run:
+          name: Run E2E Tests
+          command: |
+            cd src/Payments.EventDriven.E2E
+            npx playwright test --reporter=list
+      
+      # Store test results
+      - store_test_results:
+          path: src/Payments.EventDriven.E2E/test-results
+      
+      # Store artifacts (screenshots, videos, etc.)
+      - store_artifacts:
+          path: src/Payments.EventDriven.E2E/test-results
+          destination: test-results
+      
+      # Cleanup
+      - run:
+          name: Stop Docker Compose
+          command: docker-compose down -v
+          when: always
+
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      - build-and-test
