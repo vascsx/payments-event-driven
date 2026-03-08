@@ -30,11 +30,11 @@ test('should return 404 when attempting to get payment with non-existent ID', as
     expect(response.status()).toBe(404);
 });
 
-test('should return 400 or 404 when payment ID format is invalid', async ({ request }) => {
+test('should return 404 when payment ID format is invalid', async ({ request }) => {
     const invalidId = 'not-a-valid-guid';
     const response = await request.get(`/api/payments/${invalidId}`);
 
-    expect([400, 404]).toContain(response.status());
+    expect(response.status()).toBe(404);
 });
 
 test('should return payment in Pending status immediately after creation', async ({ request }) => {

@@ -98,11 +98,14 @@ test.describe('Validation errors', () => {
     });
 });
 
-test('should handle payment creation when amount is extremely large', async ({ request }) => {
+test('should accept payment creation when amount is extremely large', async ({ request }) => {
     const paymentData = paymentFactory({ amount: 999999999999.99 });
     const response = await createPayment(request, paymentData);
 
-    expect([201, 400]).toContain(response.status());
+    expect(response.status()).toBe(201);
+    
+    const body = await response.json();
+    createdPayments.push(body.id);
 });
 
 test('should accept payment creation when amount has exactly 2 decimal places', async ({ request }) => {

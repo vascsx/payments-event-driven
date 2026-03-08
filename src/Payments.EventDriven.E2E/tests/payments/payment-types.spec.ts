@@ -103,35 +103,4 @@ test('should route each payment type to its corresponding handler and preserve t
     processedPayments.forEach(payment => {
         expect(payment.status).toBe('Processed');
     });
-
-    test('should route each payment type to its corresponding handler and preserve type after processing', async ({ request }) => {
-        const defaultPayment = paymentFactory({ amount: 50.00, currency: "USD", type: 0 });
-        const darfPayment = paymentFactory({ amount: 50.00, currency: "BRL", type: 1 });
-        const darjPayment = paymentFactory({ amount: 50.00, currency: "BRL", type: 2 });
-
-        const responses = await Promise.all([
-            createPayment(request, defaultPayment),
-            createPayment(request, darfPayment),
-            createPayment(request, darjPayment)
-        ]);
-
-        responses.forEach(response => {
-            expect(response.status()).toBe(201);
-        });
-
-        const ids = await Promise.all(responses.map(r => r.json().then(b => b.id)));
-        createdPayments.push(...ids);
-
-        const processedPayments = await Promise.all(
-            ids.map(id => waitForStatus(
-                () => getPayment(request, id),
-                (payment: any) => payment.status,
-                'Processed'
-            ))
-        );
-
-        processedPayments.forEach(payment => {
-            expect(payment.status).toBe('Processed');
-        });
-    });
-})
+});
