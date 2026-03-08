@@ -23,6 +23,7 @@ public class GetPaymentUseCase : IGetPaymentUseCase
             payment.Id,
             payment.Amount,
             payment.Currency,
+            payment.Type,
             payment.Status.ToString(),
             payment.CreatedAt,
             payment.FailureReason);
