@@ -26,8 +26,7 @@ public static class DependencyInjection
         services.AddScoped<DarfPaymentHandler>();
         services.AddScoped<DarjPaymentHandler>();
 
-        // Event Handler Factory
-        services.AddSingleton<IEventHandlerFactory, EventHandlerFactory>();
+        services.AddScoped<IEventHandlerFactory, EventHandlerFactory>();
 
         return services;
     }

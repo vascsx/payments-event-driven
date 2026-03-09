@@ -14,7 +14,7 @@ public class GetPaymentUseCase : IGetPaymentUseCase
 
     public async Task<GetPaymentResponse?> ExecuteAsync(Guid paymentId, CancellationToken cancellationToken)
     {
-        var payment = await _repository.GetByIdAsync(paymentId, cancellationToken);
+        var payment = await _repository.GetByIdWithoutLockAsync(paymentId, cancellationToken);
 
         if (payment is null)
             return null;

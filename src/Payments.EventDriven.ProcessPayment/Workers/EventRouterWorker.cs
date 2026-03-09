@@ -1,4 +1,5 @@
 using Confluent.Kafka;
+using Confluent.Kafka.Admin;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -54,6 +55,8 @@ public class EventRouterWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await EnsureTopicsExistAsync(stoppingToken);
+
         var config = new ConsumerConfig
         {
             BootstrapServers = _kafkaSettings.BootstrapServers,
@@ -147,6 +150,41 @@ public class EventRouterWorker : BackgroundService
             _logger.LogInformation(
                 "EventRouterWorker stopped. Final metrics - Processed: {Processed}, Failed: {Failed}, Retried: {Retried}, SentToDlq: {Dlq}",
                 _messagesProcessed, _messagesFailed, _messagesRetried, _messagesSentToDlq);
+        }
+    }
+
+    private async Task EnsureTopicsExistAsync(CancellationToken cancellationToken)
+    {
+        var adminConfig = new AdminClientConfig
+        {
+            BootstrapServers = _kafkaSettings.BootstrapServers
+        };
+
+        using var adminClient = new AdminClientBuilder(adminConfig).Build();
+
+        var topics = new[]
+        {
+            _kafkaSettings.Topic,
+            $"{_kafkaSettings.Topic}-dlq"
+        };
+
+        foreach (var topic in topics)
+        {
+            try
+            {
+                await adminClient.CreateTopicsAsync([
+                    new TopicSpecification { Name = topic, NumPartitions = 1, ReplicationFactor = 1 }
+                ]);
+                _logger.LogInformation("Kafka topic {Topic} created successfully", topic);
+            }
+            catch (CreateTopicsException ex) when (ex.Results.Any(r => r.Error.Code == ErrorCode.TopicAlreadyExists))
+            {
+                _logger.LogDebug("Kafka topic {Topic} already exists", topic);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create topic {Topic}, it may be auto-created later", topic);
+            }
         }
     }
 
