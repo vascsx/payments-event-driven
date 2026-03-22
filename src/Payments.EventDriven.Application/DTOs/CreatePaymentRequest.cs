@@ -18,4 +18,13 @@ public class CreatePaymentRequest
     /// </summary>
     public PaymentType Type { get; set; } = PaymentType.Default;
     public string? IdempotencyKey { get; set; }
+
+    // Campos específicos do DARF
+    public string? CodigoReceita { get; set; }
+    public string? PeriodoApuracao { get; set; }
+    public string? NumeroReferencia { get; set; }
+
+    // Campos específicos do DARJ
+    public string? CodigoReceitaEstadual { get; set; }
+    public string? InscricaoEstadual { get; set; }
 }

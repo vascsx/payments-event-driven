@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Payments.EventDriven.Application.Constants;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Infrastructure.Settings;
 
@@ -68,11 +69,11 @@ public class EventRouterWorker : BackgroundService
         };
 
         _consumer = new ConsumerBuilder<string, string>(config).Build();
-        _consumer.Subscribe(_kafkaSettings.Topic);
+        _consumer.Subscribe(KafkaTopics.AllTopics);
 
         _logger.LogInformation(
-            "EventRouterWorker started - consuming from topic {Topic} with group {GroupId}, max concurrency: {MaxConcurrency}",
-            _kafkaSettings.Topic, _kafkaSettings.GroupId, MaxConcurrentMessages);
+            "EventRouterWorker started - consuming from topics {Topics} with group {GroupId}, max concurrency: {MaxConcurrency}",
+            string.Join(", ", KafkaTopics.AllTopics), _kafkaSettings.GroupId, MaxConcurrentMessages);
 
         var activeTasks = new List<Task>();
 
@@ -162,11 +163,9 @@ public class EventRouterWorker : BackgroundService
 
         using var adminClient = new AdminClientBuilder(adminConfig).Build();
 
-        var topics = new[]
-        {
-            _kafkaSettings.Topic,
-            $"{_kafkaSettings.Topic}-dlq"
-        };
+        var topics = KafkaTopics.AllTopics
+            .SelectMany(t => new[] { t, $"{t}-dlq", $"{t}-outbox-dlq" })
+            .ToArray();
 
         foreach (var topic in topics)
         {
@@ -238,18 +237,13 @@ public class EventRouterWorker : BackgroundService
 
     private static bool IsTransientError(Exception ex)
     {
-        var exceptionType = ex.GetType();
-        if (exceptionType.Name == "PaymentNotYetVisibleException")
-        {
-            return true;
-        }
-
+        // PaymentNotYetVisibleException is NOT transient here because
+        // ProcessPaymentUseCase already retried internally with exponential backoff.
+        // If it still throws, the payment is genuinely unavailable.
         return ex is TimeoutException
-            || ex is OperationCanceledException
             || ex.Message.Contains("connection", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("temporarily unavailable", StringComparison.OrdinalIgnoreCase)
-            || ex.Message.Contains("not yet visible", StringComparison.OrdinalIgnoreCase)
             || ex.InnerException is TimeoutException;
     }
 

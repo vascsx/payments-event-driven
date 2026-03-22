@@ -45,4 +45,18 @@ public class OutboxRepository : IOutboxRepository
         _context.OutboxMessages.Update(message);
         await Task.CompletedTask;
     }
+
+    public async Task<IList<OutboxMessage>> GetPendingMessagesForProcessingAsync(
+        int maxRetries, int batchSize, CancellationToken cancellationToken = default)
+    {
+        return await _context.OutboxMessages
+            .FromSql($@"
+                SELECT * FROM outbox_messages
+                WHERE status = {OutboxMessageStatus.Pending}
+                  AND retry_count < {maxRetries}
+                ORDER BY created_at
+                LIMIT {batchSize}
+                FOR UPDATE SKIP LOCKED")
+            .ToListAsync(cancellationToken);
+    }
 }

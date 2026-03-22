@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Domain.Entities;
+using Payments.EventDriven.Domain.Enums;
 
 namespace Payments.EventDriven.Infrastructure.Persistence.Repositories;
 
@@ -58,5 +59,17 @@ public class PaymentRepository : IPaymentRepository
         _context.Payments.Remove(payment);
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task MarkAsFailedAsync(Guid paymentId, string reason, CancellationToken cancellationToken)
+    {
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(p => p.Id == paymentId && p.Status == PaymentStatus.Pending, cancellationToken);
+
+        if (payment != null)
+        {
+            payment.MarkAsFailed(reason);
+            // SaveChanges handled by IUnitOfWork
+        }
     }
 }

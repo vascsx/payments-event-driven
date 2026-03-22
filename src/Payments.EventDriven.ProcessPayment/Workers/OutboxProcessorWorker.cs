@@ -1,10 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Payments.EventDriven.Application.Interfaces;
 using Payments.EventDriven.Domain.Entities;
-using Payments.EventDriven.Infrastructure.Persistence;
 
 namespace Payments.EventDriven.ProcessPayment.Workers;
 
@@ -61,34 +59,17 @@ public class OutboxProcessorWorker : BackgroundService
     private async Task ProcessOutboxMessagesAsync(CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var outboxRepository = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+        var paymentRepository = scope.ServiceProvider.GetRequiredService<IPaymentRepository>();
         var eventPublisher = scope.ServiceProvider.GetRequiredService<IEventPublisher>();
 
-        // Usa a estratégia de execução para suportar retry com transações
-        var strategy = context.Database.CreateExecutionStrategy();
-
-        await strategy.ExecuteAsync(async () =>
+        var allSkipped = await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            // FOR UPDATE SKIP LOCKED garante que múltiplas instâncias não processem as mesmas mensagens
-            await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
-
-            try
-            {
-                var messages = await context.OutboxMessages
-                .FromSql($@"
-                        SELECT * FROM outbox_messages
-                        WHERE status = {OutboxMessageStatus.Pending} 
-                          AND retry_count < {MaxRetries}
-                        ORDER BY created_at
-                        LIMIT {BatchSize}
-                        FOR UPDATE SKIP LOCKED")
-                .ToListAsync(cancellationToken);
+            var messages = await outboxRepository.GetPendingMessagesForProcessingAsync(MaxRetries, BatchSize, ct);
 
             if (messages.Count == 0)
-            {
-                await tx.RollbackAsync(cancellationToken);
-                return;
-            }
+                return true;
 
             _logger.LogInformation("Processing {Count} messages from Outbox", messages.Count);
 
@@ -116,9 +97,6 @@ public class OutboxProcessorWorker : BackgroundService
                             }
                         }
 
-                        // Marca como Processing otimisticamente
-                        message.MarkAsProcessing();
-
                         // Publica no Kafka com headers (correlation-id + event-type para roteamento)
                         var headers = new Dictionary<string, string>
                         {
@@ -135,11 +113,10 @@ public class OutboxProcessorWorker : BackgroundService
                             message.MessageKey,
                             message.Payload,
                             headers,
-                            cancellationToken);
+                            ct);
 
                         processedCount++;
                         message.MarkAsProcessed();
-                        context.Update(message); 
 
                         _logger.LogInformation(
                             "Outbox message {OutboxId} successfully published to {Topic} after {Retries} retries. CorrelationId: {CorrelationId}",
@@ -167,18 +144,14 @@ public class OutboxProcessorWorker : BackgroundService
                             {
                                 if (Guid.TryParse(message.MessageKey, out var paymentId))
                                 {
-                                    var payment = await context.Payments
-                                        .FirstOrDefaultAsync(p => p.Id == paymentId, cancellationToken);
-
-                                    if (payment != null && payment.Status == Domain.Enums.PaymentStatus.Pending)
-                                    {
-                                        payment.MarkAsFailed($"Failed to publish event after {MaxRetries} retries: {ex.Message}");
-                                        context.Payments.Update(payment);
+                                    await paymentRepository.MarkAsFailedAsync(
+                                        paymentId,
+                                        $"Failed to publish event after {MaxRetries} retries: {ex.Message}",
+                                        ct);
                                         
-                                        _logger.LogWarning(
-                                            "Payment {PaymentId} marked as Failed due to outbox message failure. CorrelationId: {CorrelationId}",
-                                            paymentId, message.CorrelationId);
-                                    }
+                                    _logger.LogWarning(
+                                        "Payment {PaymentId} marked as Failed due to outbox message failure. CorrelationId: {CorrelationId}",
+                                        paymentId, message.CorrelationId);
                                 }
                             }
                             catch (Exception paymentEx)
@@ -195,7 +168,7 @@ public class OutboxProcessorWorker : BackgroundService
 
                             try
                             {
-                                await SendFailedMessageToDlqAsync(message, eventPublisher, cancellationToken);
+                                await SendFailedMessageToDlqAsync(message, eventPublisher, ct);
                             }
                             catch (Exception dlqEx)
                             {
@@ -210,36 +183,24 @@ public class OutboxProcessorWorker : BackgroundService
                                 "Failed to publish Outbox message {OutboxId} (attempt {Retry}/{MaxRetries}). Will retry later. CorrelationId: {CorrelationId}",
                                 message.Id, message.RetryCount, MaxRetries, message.CorrelationId);
                         }
-
-                        // Garante que o EF rastreie as mudanças de retry/failed
-                        context.Update(message);
                     }
                 }
 
                 if (processedCount > 0 || skippedCount < messages.Count)
                 {
-                    await context.SaveChangesAsync(cancellationToken);
-                    await tx.CommitAsync(cancellationToken);
-
                     _logger.LogInformation(
                         "Batch completed: {Processed} processed, {Skipped} skipped, {Failed} failed",
                         processedCount, skippedCount, messages.Count - processedCount - skippedCount);
                 }
-                else
-                {
-                    await tx.RollbackAsync(cancellationToken);
-                    _logger.LogDebug("All messages in backoff, skipping batch");
-                    
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                await tx.RollbackAsync(cancellationToken);
-                _logger.LogError(ex, "Failed to process outbox batch, transaction rolled back");
-                throw; // Re-throw para a estratégia de execução lidar com retry se necessário
-            }
-        });
+
+                return processedCount == 0 && skippedCount == messages.Count;
+        }, cancellationToken);
+
+        if (allSkipped)
+        {
+            _logger.LogDebug("All messages in backoff, delaying next poll");
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+        }
     }
 
     /// <summary>

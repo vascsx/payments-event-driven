@@ -9,4 +9,5 @@ public interface IPaymentRepository
     Task<Payment?> GetByIdWithoutLockAsync(Guid id, CancellationToken cancellationToken);
     Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task MarkAsFailedAsync(Guid paymentId, string reason, CancellationToken cancellationToken);
 }

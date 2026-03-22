@@ -20,11 +20,13 @@ public static class DependencyInjection
         services.AddScoped<IEventHandler, DefaultPaymentHandler>();
         services.AddScoped<IEventHandler, DarfPaymentHandler>();
         services.AddScoped<IEventHandler, DarjPaymentHandler>();
+        services.AddScoped<IEventHandler, PaymentDeletedHandler>();
         
         // Registra cada handler também por seu tipo concreto (necessário para factory)
         services.AddScoped<DefaultPaymentHandler>();
         services.AddScoped<DarfPaymentHandler>();
         services.AddScoped<DarjPaymentHandler>();
+        services.AddScoped<PaymentDeletedHandler>();
 
         services.AddScoped<IEventHandlerFactory, EventHandlerFactory>();
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Payments.EventDriven.Application.Constants;
 using Payments.EventDriven.Infrastructure.Settings;
 
 namespace Payments.EventDriven.ProcessPayment.Workers;
@@ -38,23 +39,21 @@ public class DlqMonitorWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var dlqTopic = $"{_kafkaSettings.Topic}-dlq";
-
         var config = new ConsumerConfig
         {
             BootstrapServers = _kafkaSettings.BootstrapServers,
             GroupId = $"{_kafkaSettings.GroupId}-dlq-monitor",
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true, // Auto-commit para DLQ monitor
+            EnableAutoCommit = true,
             EnableAutoOffsetStore = true
         };
 
         _consumer = new ConsumerBuilder<string, string>(config).Build();
-        _consumer.Subscribe(dlqTopic);
+        _consumer.Subscribe(KafkaTopics.AllDlqTopics);
 
         _logger.LogInformation(
-            "DLQ Monitor started - consuming from topic {DlqTopic} with group {GroupId}",
-            dlqTopic, config.GroupId);
+            "DLQ Monitor started - consuming from topics {DlqTopics} with group {GroupId}",
+            string.Join(", ", KafkaTopics.AllDlqTopics), config.GroupId);
 
         try
         {
